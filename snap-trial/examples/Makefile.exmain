@@ -2,13 +2,30 @@
 # Makefile for non-Microsoft compilers
 #
 
+#
+# In this context, all instances of $(MAIN)
+# Are just node2vec (see Makefile.ex) which
+# defines : MAIN = node2vec
+#
+
 all: $(MAIN)
 
+#
 # COMPILE
 # Here is exaclty where Snap is being compiled ohmygod
+# To build all it needs, node2vec.cpp, biasedrandomwalk, word2vec && Allmighty Snap.o, which is snap-core/Snap.o
+# 
+# When compiling this includes Makefiles from snap-core, snap-adv, glib-core and (snap-exp deleted, not needed)
+# snap-adv has been limited a lot (only needed for node2vec)
+#
+
 $(MAIN): $(MAIN).cpp $(DEPH) $(DEPCPP) $(EXSNAP)/Snap.o 
-	$(CC) $(CXXFLAGS) -o $(MAIN) $(MAIN).cpp $(DEPCPP) $(EXSNAP)/Snap.o -I$(EXSNAP) -I$(EXSNAPADV) -I$(EXGLIB) -I$(EXSNAPEXP) $(LDFLAGS) $(LIBS)
+	$(CC) $(CXXFLAGS) -o $(MAIN) $(MAIN).cpp $(DEPCPP) $(EXSNAP)/Snap.o -I$(EXSNAP) -I$(EXSNAPADV) -I$(EXGLIB) $(LDFLAGS) $(LIBS)
 	cp $(MAIN) ../Release
+
+#
+# To get snap-core/Snap.o we compile the whole dir
+#
 
 $(EXSNAP)/Snap.o: 
 	make -C $(EXSNAP)

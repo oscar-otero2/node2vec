@@ -8,6 +8,7 @@ test: TestAll
 
 MakeAll:
 	$(MAKE) -C examples
+# $(MAKE) -C test
 
 TestAll:
 	$(MAKE) run -C test
