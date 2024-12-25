@@ -83,7 +83,7 @@ int gettimeofday(struct timeval *tp, void *tzp)
 #include "hash.cpp"
 
 #include "unicode.cpp"
-#include "unicodestring.cpp"
+//#include "unicodestring.cpp"
 #include "tm.cpp"
 #include "os.cpp"
 
@@ -106,5 +106,5 @@ int gettimeofday(struct timeval *tp, void *tzp)
 //#include "json.cpp"
 //#include "prolog.cpp"
 
-#include "zipfl.cpp"
+//#include "zipfl.cpp"
 

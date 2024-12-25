@@ -183,14 +183,14 @@
 #include "ds.h"
 #include "bits.h"
 #include "hash.h"
-#include "hashmp.h"
+//#include "hashmp.h"
 #include "xml.h"
 
 #include "xmath.h"
-#include "xmlser.h"
+//#include "xmlser.h"
 
 #include "unicode.h"
-#include "unicodestring.h"
+//#include "unicodestring.h"
 #include "tm.h"
 #include "shash.h"
 #include "os.h"
@@ -211,7 +211,7 @@
 //#include "json.h"
 //#include "prolog.h"
 
-#include "zipfl.h"
+//#include "zipfl.h"
 
 void BaseTralala();
 
