@@ -63,7 +63,7 @@
   - fflush (esta es del propio cpp)
   - SimulateWalk
   - LearnEmbeddings
-- Namespaces :
+- Namespaces ? Creo que son clases :
   - TWNet
     - TNodeI
   - TNGraph
@@ -93,7 +93,7 @@ typedef TNodeEDatNet<TIntIntVFltVPrH, TFlt> TWNet;
 ```
 
 TNodeEDatNet<> -> snap-core/network.h 
-(Node Edge Network (directed graph, TNGraph with data on nodes and edges)
+(Node Edge Network (directed graph, TNGraph with data on nodes and edges))
 ```text
   Esta es una clase de 200 líneas con muchas dependencias del resto de clases del fichero por lo que lo más fácil será contarlo como un completo.
   Supongo que esto malo será, parece bastante stand alone porque el network.cpp tampoco tiene ningún import de absolutamente nada.
@@ -115,7 +115,7 @@ THash<> -> glib-core/hash.h
 
 TInt -> glib-core/dt.h
 (Ints con funciones chulas)
-```texto
+```text
   Vuelve a ser una clase con muchas dependencias
   Solamente depende de bd.h de nuevo, así que podemos simplemente aceptar el fichero.
   El cpp tampoco tiene imports
@@ -290,9 +290,6 @@ Todas las clases que requieren estas funciones en principio deberían de estar y
 Revisar aún así una por una.
 
 
-## Namespaces (?)
-
-
 # Resumen
 
 ```cpp
@@ -338,4 +335,36 @@ void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
 }
 ```
 
-Esta es la función base de node2vec. El resto de funciones que hay definidas en el fichero simplemente ejecutan la función partiendo de un menor número de parámetros. La idea es ver de que dependen cada una de las clases, funciones, y namespaces encontrados y asilarlos.
+Esta es la función base de node2vec. El resto de funciones que hay definidas en el fichero simplemente ejecutan la función partiendo de un menor número de parámetros. La idea es ver de que dependen cada una de las clases, funciones, y namespaces encontrados y aislarlos.
+
+Este mini análisis sirve finalmente para ver el código que más flagrantemente es dependencia de la función a analizar, no obstante, algunas de las clases identificadas tienen dependencias con otras, por lo que algunos ficheros a mayores han sido identificados.
+
+Nuestra lista de dependencias acaba siendo:
+  - stdafx.h
+  - base.cpp | base.h :
+    - bd.cpp | bd.h
+    - fl.cpp | fl.h
+    - dt.cpp | dt.h
+    - ut.cpp | ut.h
+    - ds.h
+    - hash.cpp | hash.h
+    - shash.h
+    - unicode.cpp | unicode.h
+    - tm.cpp | tm.h
+    - os.cpp | os.h
+    - bits.cpp | bits.h
+    - env.cpp | env.h
+    - xfl.cpp | xfl.h
+    - xmath.cpp | xmath.h
+    - lx.cpp | lx.h
+    - md5.cpp | md5.h
+    - xml.cpp | xml.h
+  - gbase.cpp | gbase.h
+  - attr.cpp | attr.h
+  - graph.cpp | graph.h
+  - network.cpp | network.h
+
+Con estas dependencias el código compila sin ningún problema.
+De modificarse partes del código, probablemente algunas de estas podrían ser eliminadas, pero he decidido intentar tocar lo menos posible el código para que se mantenga lo más íntegro posible.
+
+Finalmente en cuanto a los tests los he desactivado dado que no he encontrado ninguna documentación en cuanto a como utilizarlos y con las dependencias que he supuesto (la librería de gtest) no funcionan ni en el repositorio de snap sin ninguna modificación. Estos tests son unitarios de algunas de las clases, cubren clases que realmente no son relevantes (por lo menos en principio, para la modificación de node2vec).
