@@ -38,13 +38,19 @@ Ahora estoy teniendo problemas con los tipos de glib-core que importa bd (que no
 
 
 En glib core se podrían eliminar unos cuantos archivos. No obstante simplemente he comentado sus includes en base.h y base.cpp para evitar que se compilen. He modificado ->
-  - json
-  - ssmp
-  - ss
-  - html
-  - http
-  - url
-  - blobbs
-  - wch
+- hashmap.h
+- xmlser.h
+- unicodestring.cpp | unicodestring.h
+- wch.cpp | wch.h
+- blobbs.cpp | blobbs.h
+- url.cpp | url.h
+- http.cpp | http.h
+- html.cpp | html.h
+- ss.cpp | ss.h
+- ssmp.cpp | ssmp.h
+- json.cpp | json.h
+- prolog.cpp | prolog.h
+- zipfl.cpp | zipfl.h
 
-Supongo que estos no son necesarios porque todo aquello que se utiliza para compilar node2vec no las utiliza (?) pero entonces me extraña en cierta medida que sí que se esté utilizando alguna cosa como xml (?)
+No he podido eliminar más dependencias dado que otras de las que están en este fichero, a pesar de no ser necesarias para las funcionalidades de node2vec, tienen dependencias en algunos de los ficheros que sí son necesarios (por lo que he observado snap es algo monolítico en cuanto a sus clases base).
+Por ejemplo la clase TXmlObjSer o TXmlDoc que se utiliza en bd.h en bastantes funciones requieren de añadir axml.h y xml.cpp a la compilación.
