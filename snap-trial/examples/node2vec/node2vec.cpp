@@ -36,29 +36,57 @@ void ParseArgs(int& argc, char* argv[], TStr& InFile, TStr& OutFile,
   OutputWalks = Env.IsArgStr("-ow", "Output random walks instead of embeddings.");
 }
 
+// Updates the PWNet InNet according to the actual graph we input
 void ReadGraph(TStr& InFile, bool& Directed, bool& Weighted, bool& Verbose, PWNet& InNet) {
   TFIn FIn(InFile);
   int64 LineCnt = 0;
   try {
+    // Parse each line in graph
     while (!FIn.Eof()) {
       TStr Ln;
       FIn.GetNextLn(Ln);
       TStr Line, Comment;
+      
+      // Comments specified as #
+      // Also split with spaces into tokens
       Ln.SplitOnCh(Line,'#',Comment);
       TStrV Tokens;
       Line.SplitOnWs(Tokens);
+      
+      // If only one token (no meaning) or empty line, don't do anything
       if(Tokens.Len()<2){ continue; }
+
+      // Get the two (2) ints (that supposedly represent nodes of graph)
       int64 SrcNId = Tokens[0].GetInt();
       int64 DstNId = Tokens[1].GetInt();
       double Weight = 1.0;
+      
+      // If the graph is weighted the third token will be weight
       if (Weighted) { Weight = Tokens[2].GetFlt(); }
+      
+      // InNet is a PWNet that has just been created in main 
+      // This class represents a pointer to a graph that has
+      // (Some value) for nodes and tFlt for edges 
+      
+      // Creates the specified nodes if they don't already exist
       if (!InNet->IsNode(SrcNId)){ InNet->AddNode(SrcNId); }
       if (!InNet->IsNode(DstNId)){ InNet->AddNode(DstNId); }
+      
+      // We add the described edge with the desired weight
+      // 1.0 if not weighted
       InNet->AddEdge(SrcNId,DstNId,Weight);
+      
+      // If our graph is not directed we also add the opposite direction
+      // As a new edge
       if (!Directed){ InNet->AddEdge(DstNId,SrcNId,Weight); }
+      
+      // Count number of read lines
       LineCnt++;
     }
+    
+    //Self explanatory
     if (Verbose) { printf("Read %lld lines from %s\n", (long long)LineCnt, InFile.CStr()); }
+
   } catch (PExcept Except) {
     if (Verbose) {
       printf("Read %lld lines from %s, then %s\n", (long long)LineCnt, InFile.CStr(),
@@ -67,34 +95,57 @@ void ReadGraph(TStr& InFile, bool& Directed, bool& Weighted, bool& Verbose, PWNe
   }
 }
 
+// Write desired Output
 void WriteOutput(TStr& OutFile, TIntFltVH& EmbeddingsHV, TVVec<TInt, int64>& WalksVV,
  bool& OutputWalks) {
+  
+  // If OutputWalks was specified during execution then
+  // Print all full walks (-r walks from each node with 
+  // length -l)
   TFOut FOut(OutFile);
   if (OutputWalks) {
     for (int64 i = 0; i < WalksVV.GetXDim(); i++) {
       for (int64 j = 0; j < WalksVV.GetYDim(); j++) {
+        // For every int in WalksVV (vector vector [][]-like structure)
+        // Write an int for its value (group while Y Dim)
+        // Sepparation for YDim is ' ', XDim is '\n'
         FOut.PutInt(WalksVV(i,j));
-	if(j+1==WalksVV.GetYDim()) {
+	      if(j+1==WalksVV.GetYDim()) {
           FOut.PutLn();
-	} else {
+	      } else {
           FOut.PutCh(' ');
-	}
+	      }
       }
     }
     return;
   }
+  
+  // Only if NOT OutputWalks
   bool First = 1;
+  
+  // For all embeddings Do something(?)
+  // Write this time Embeddings instead of walks
+  // From this Hashmap Vector (?)
   for (int i = EmbeddingsHV.FFirstKeyId(); EmbeddingsHV.FNextKeyId(i);) {
     if (First) {
+      // Amount of nodes in graph
       FOut.PutInt(EmbeddingsHV.Len());
       FOut.PutCh(' ');
+      
+      // Amount of dimensions for each node
+      // This is -d (number of dimensions) parameter
       FOut.PutInt(EmbeddingsHV[i].Len());
       FOut.PutLn();
       First = 0;
     }
+    
+    // Prints node number
     FOut.PutInt(EmbeddingsHV.GetKey(i));
+
     for (int64 j = 0; j < EmbeddingsHV[i].Len(); j++) {
       FOut.PutCh(' ');
+      
+      // Prints full embeddings (all dimensions) for each node
       FOut.PutFlt(EmbeddingsHV[i][j]);
     }
     FOut.PutLn();
@@ -106,14 +157,27 @@ int main(int argc, char* argv[]) {
   int Dimensions, WalkLen, NumWalks, WinSize, Iter;
   double ParamP, ParamQ;
   bool Directed, Weighted, Verbose, OutputWalks;
+  
+  // Just parses arguments to allow for execution
   ParseArgs(argc, argv, InFile, OutFile, Dimensions, WalkLen, NumWalks, WinSize,
    Iter, Verbose, ParamP, ParamQ, Directed, Weighted, OutputWalks);
+
+  // We create our super new graph
   PWNet InNet = PWNet::New();
+  
+  // This is a Float Vector Hashmap, so a hashmap of all Embedding vectors I think
   TIntFltVH EmbeddingsHV;
   TVVec <TInt, int64> WalksVV;
+  
+  // Write InNet with our graph file
   ReadGraph(InFile, Directed, Weighted, Verbose, InNet);
+  
+  // Apply node2vec algorithm
+  // EmbeddingsHV and WalksVV have just been created
   node2vec(InNet, ParamP, ParamQ, Dimensions, WalkLen, NumWalks, WinSize, Iter, 
    Verbose, OutputWalks, WalksVV, EmbeddingsHV);
+
+  // Write desired output (either walks or embeddings)
   WriteOutput(OutFile, EmbeddingsHV, WalksVV, OutputWalks);
   return 0;
 }

@@ -55,6 +55,10 @@ int64 AliasDrawInt(TIntVFltVPr& NTTable, TRnd& Rnd) {
   return Y < NTTable.GetVal2()[X] ? X : NTTable.GetVal1()[X];
 }
 
+// Process each node
+// This is an interesting function but I don't think I need to explain it all
+// Because its end goal is to give us the probabilities of taking each edge
+// They are given in the node itself(?)
 void PreprocessNode (PWNet& InNet, const double& ParamP, const double& ParamQ,
  TWNet::TNodeI NI, int64& NCnt, const bool& Verbose) {
   if (Verbose && NCnt%100 == 0) {
@@ -65,13 +69,19 @@ void PreprocessNode (PWNet& InNet, const double& ParamP, const double& ParamQ,
   for (int64 i = 0; i < NI.GetOutDeg(); i++) {
     NbrH.AddKey(NI.GetNbrNId(i));
   } 
+
+  // For each neighbour
   for (int64 i = 0; i < NI.GetOutDeg(); i++) {
     TWNet::TNodeI CurrI = InNet->GetNI(NI.GetNbrNId(i));      //for each node v
     double Psum = 0;
     TFltV PTable;                              //Probability distribution table
+
+    // For each neighbour's neighbours
     for (int64 j = 0; j < CurrI.GetOutDeg(); j++) {           //for each node x
       int64 FId = CurrI.GetNbrNId(j);
       TFlt Weight;
+      
+      // If <something> ignore x node
       if (!(InNet->GetEDat(CurrI.GetId(), FId, Weight))){ continue; }
       if (FId==NI.GetId()) {
         PTable.Add(Weight / ParamP);
@@ -95,21 +105,29 @@ void PreprocessNode (PWNet& InNet, const double& ParamP, const double& ParamQ,
 
 //Preprocess transition probabilities for each path t->v->x
 void PreprocessTransitionProbs(PWNet& InNet, const double& ParamP, const double& ParamQ, const bool& Verbose) {
+  // For each node in InNet
   for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
     InNet->SetNDat(NI.GetId(),TIntIntVFltVPrH());
   }
+  
+  // For each node in InNet
   for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
     for (int64 i = 0; i < NI.GetOutDeg(); i++) {                    //allocating space in advance to avoid issues with multithreading
       TWNet::TNodeI CurrI = InNet->GetNI(NI.GetNbrNId(i));
       CurrI.GetDat().AddDat(NI.GetId(),TPair<TIntV,TFltV>(TIntV(CurrI.GetOutDeg()),TFltV(CurrI.GetOutDeg())));
     }
   }
+
   int64 NCnt = 0;
   TIntV NIds;
+  
+  // For each node in InNet get its id
   for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
     NIds.Add(NI.GetId());
   }
+
 #pragma omp parallel for schedule(dynamic)
+  // Preprocess all nodes in InNet
   for (int64 i = 0; i < NIds.Len(); i++) {
     PreprocessNode(InNet, ParamP, ParamQ, InNet->GetNI(NIds[i]), NCnt, Verbose);
   }

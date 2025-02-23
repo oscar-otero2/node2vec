@@ -6,7 +6,10 @@
 //Customized for SNAP and node2vec
 
 void LearnVocab(TVVec<TInt, int64>& WalksVV, TIntV& Vocab) {
+  // Init vocab to 0
   for( int64 i = 0; i < Vocab.Len(); i++) { Vocab[i] = 0; }
+
+  // Count the times we stepped on each node
   for( int64 i = 0; i < WalksVV.GetXDim(); i++) {
     for( int j = 0; j < WalksVV.GetYDim(); j++) {
       Vocab[WalksVV(i,j)]++;
@@ -98,8 +101,13 @@ void TrainModel(TVVec<TInt, int64>& WalksVV, const int& Dimensions,
   TFltV Neu1eV(Dimensions);
   int64 AllWords = WalksVV.GetXDim()*WalksVV.GetYDim();
   TIntV WalkV(WalksVV.GetYDim());
+
+  // Divide into separate walks
   for (int j = 0; j < WalksVV.GetYDim(); j++) { WalkV[j] = WalksVV(CurrWalk,j); }
+
+  // For each node do everything
   for (int64 WordI=0; WordI<WalkV.Len(); WordI++) {
+
     if ( WordCntAll%10000 == 0 ) {
       if ( Verbose ) {
         printf("\rLearning Progress: %.2lf%% ",(double)WordCntAll*100/(double)(Iter*AllWords));
@@ -108,11 +116,15 @@ void TrainModel(TVVec<TInt, int64>& WalksVV, const int& Dimensions,
       Alpha = StartAlpha * (1 - WordCntAll / static_cast<double>(Iter * AllWords + 1));
       if ( Alpha < StartAlpha * 0.0001 ) { Alpha = StartAlpha * 0.0001; }
     }
+
     int64 Word = WalkV[WordI];
+    // Init Neu1V and Neu1eV
     for (int i = 0; i < Dimensions; i++) {
       Neu1V[i] = 0;
       Neu1eV[i] = 0;
     }
+
+    // WordI is the current node of the walk
     int Offset = Rnd.GetUniDevInt() % WinSize;
     for (int a = Offset; a < WinSize * 2 + 1 - Offset; a++) {
       if (a == WinSize) { continue; }
@@ -120,7 +132,10 @@ void TrainModel(TVVec<TInt, int64>& WalksVV, const int& Dimensions,
       if (CurrWordI < 0){ continue; }
       if (CurrWordI >= WalkV.Len()){ continue; }
       int64 CurrWord = WalkV[CurrWordI];
+      
+      // Init this vector to 0
       for (int i = 0; i < Dimensions; i++) { Neu1eV[i] = 0; }
+
       //negative sampling
       for (int j = 0; j < NegSamN+1; j++) {
         int64 Target, Label;
@@ -163,6 +178,7 @@ void LearnEmbeddings(TVVec<TInt, int64>& WalksVV, const int& Dimensions,
   TIntIntH RnmH;
   TIntIntH RnmBackH;
   int64 NNodes = 0;
+
   //renaming nodes into consecutive numbers
   for (int i = 0; i < WalksVV.GetXDim(); i++) {
     for (int64 j = 0; j < WalksVV.GetYDim(); j++) {
@@ -175,34 +191,50 @@ void LearnEmbeddings(TVVec<TInt, int64>& WalksVV, const int& Dimensions,
       }
     }
   }
+
+  // Creation of int vector vocab of length Number of nodes
+  // It holds (for each node) the number of times it has been visited
   TIntV Vocab(NNodes);
   LearnVocab(WalksVV, Vocab);
+
+  // Create Int vector and Float vector of length number of nodes
   TIntV KTable(NNodes);
   TFltV UTable(NNodes);
   TVVec<TFlt, int64> SynNeg;
   TVVec<TFlt, int64> SynPos;
   TRnd Rnd(time(NULL));
+
+  // Initializations
   InitPosEmb(Vocab, Dimensions, Rnd, SynPos);
   InitNegEmb(Vocab, Dimensions, SynNeg);
   InitUnigramTable(Vocab, KTable, UTable);
   TFltV ExpTable(TableSize);
+
+  // From section 3.2.2 of node2vec's paper
   double Alpha = StartAlpha;                              //learning rate
+  // Get values into ExpTable (vector of floats)
 #pragma omp parallel for schedule(dynamic)
   for (int i = 0; i < TableSize; i++ ) {
     double Value = -MaxExp + static_cast<double>(i) / static_cast<double>(ExpTablePrecision);
     ExpTable[i] = TMath::Power(TMath::E, Value);
   }
+
   int64 WordCntAll = 0;
 // op RS 2016/09/26, collapse does not compile on Mac OS X
 //#pragma omp parallel for schedule(dynamic) collapse(2)
   for (int j = 0; j < Iter; j++) {
 #pragma omp parallel for schedule(dynamic)
     for (int64 i = 0; i < WalksVV.GetXDim(); i++) {
+      // For each walk train model
+      // This changes SynNeg and SynPos
       TrainModel(WalksVV, Dimensions, WinSize, Iter, Verbose, KTable, UTable,
        WordCntAll, ExpTable, Alpha, i, Rnd, SynNeg, SynPos); 
     }
   }
+
   if (Verbose) { printf("\n"); fflush(stdout); }
+
+  // Write embeddings in the vector
   for (int64 i = 0; i < SynPos.GetXDim(); i++) {
     TFltV CurrV(SynPos.GetYDim());
     for (int j = 0; j < SynPos.GetYDim(); j++) { CurrV[j] = SynPos(i, j); }
