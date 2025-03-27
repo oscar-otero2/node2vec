@@ -5,15 +5,26 @@
 //Preprocess alias sampling method
 void GetNodeAlias(TFltV& PTblV, TIntVFltVPr& NTTable) {
   int64 N = PTblV.Len();
+
+  // These are the vectors stored for every node
   TIntV& KTbl = NTTable.Val1;
   TFltV& UTbl = NTTable.Val2;
+  
+  // Init them to 0
   for (int64 i = 0; i < N; i++) {
     KTbl[i]=0;
     UTbl[i]=0;
   }
+
+  // UnderV has indices for those neighbours where
+  // Probability * num of neighbours < 1
+  // The opposite is true for OverV
   TIntV UnderV;
   TIntV OverV;
+  
+  // For each neighbour that we evaluated
   for (int64 i = 0; i < N; i++) {
+    // Float in node = probability * Num of neighbours
     UTbl[i] = PTblV[i]*N;
     if (UTbl[i] < 1) {
       UnderV.Add(i);
@@ -21,19 +32,28 @@ void GetNodeAlias(TFltV& PTblV, TIntVFltVPr& NTTable) {
       OverV.Add(i);
     }
   }
+
+  // This is supposedly the aliasing
   while (UnderV.Len() > 0 && OverV.Len() > 0) {
+    // Pop last element of both
     int64 Small = UnderV.Last();
     int64 Large = OverV.Last();
     UnderV.DelLast();
     OverV.DelLast();
+
+    // Int vector of node
     KTbl[Small] = Large;
+    
+    // Flt vector of node
     UTbl[Large] = UTbl[Large] + UTbl[Small] - 1;
+    
     if (UTbl[Large] < 1) {
       UnderV.Add(Large);
     } else {
       OverV.Add(Large);
     }
   }
+  
   while(UnderV.Len() > 0){
     int64 curr = UnderV.Last();
     UnderV.DelLast();
@@ -82,6 +102,8 @@ void PreprocessNode (PWNet& InNet, const double& ParamP, const double& ParamQ,
       TFlt Weight;
       
       // If <something> ignore x node
+      // All of the values that appear after this are directly explained in the paper:
+      // Section 3.2.2
       if (!(InNet->GetEDat(CurrI.GetId(), FId, Weight))){ continue; }
       if (FId==NI.GetId()) {
         PTable.Add(Weight / ParamP);
@@ -112,8 +134,11 @@ void PreprocessTransitionProbs(PWNet& InNet, const double& ParamP, const double&
   
   // For each node in InNet
   for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
+    // For all neighbours
     for (int64 i = 0; i < NI.GetOutDeg(); i++) {                    //allocating space in advance to avoid issues with multithreading
       TWNet::TNodeI CurrI = InNet->GetNI(NI.GetNbrNId(i));
+      // Get node data (what is it)
+      // Add to it (as hashtable) (its id, a pair of an int vector and a float vector of the size of the out degree of the node)
       CurrI.GetDat().AddDat(NI.GetId(),TPair<TIntV,TFltV>(TIntV(CurrI.GetOutDeg()),TFltV(CurrI.GetOutDeg())));
     }
   }
@@ -148,13 +173,25 @@ int64 PredictMemoryRequirements(PWNet& InNet) {
 //Simulates a random walk
 void SimulateWalk(PWNet& InNet, int64 StartNId, const int& WalkLen, TRnd& Rnd, TIntV& WalkV) {
   WalkV.Add(StartNId);
+  // If length of walk is one or node is isolated return a walk with only one node
   if (WalkLen == 1) { return; }
   if (InNet->GetNI(StartNId).GetOutDeg() == 0) { return; }
+
+  // Adds next node completely randomly
+  // This is why we repeat the walk r times
   WalkV.Add(InNet->GetNI(StartNId).GetNbrNId(Rnd.GetUniDevInt(InNet->GetNI(StartNId).GetOutDeg())));
+
+  // For full rest of walk
   while (WalkV.Len() < WalkLen) {
+    // Final element of vector
     int64 Dst = WalkV.Last();
+    
+    // Penultimate element of vector
     int64 Src = WalkV.LastLast();
+
     if (InNet->GetNI(Dst).GetOutDeg() == 0) { return; }
+    
+    // Get random next node (This is probably using that one paper's method)
     int64 Next = AliasDrawInt(InNet->GetNDat(Dst).GetDat(Src),Rnd);
     WalkV.Add(InNet->GetNI(Dst).GetNbrNId(Next));
   }

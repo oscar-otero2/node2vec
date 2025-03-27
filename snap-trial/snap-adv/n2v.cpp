@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "n2v.h"
+#include <ctime>
 
 // Base function of node2vec
 void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
@@ -10,8 +11,19 @@ void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
   // Preprocess transition probabilities
   // From biasedrandomwalk.cpp ->
   // Is essentially section 3.2.2 of node2vec's paper.
-  PreprocessTransitionProbs(InNet, ParamP, ParamQ, Verbose);
   
+  clock_t begin = clock();
+  double begin_nat = omp_get_wtime();
+  PreprocessTransitionProbs(InNet, ParamP, ParamQ, Verbose);
+  clock_t end = clock();
+  double end_nat = omp_get_wtime();
+  double _time = double(end-begin)/CLOCKS_PER_SEC;
+  double _time_nat = end_nat - begin_nat;
+  // printf("PreprocessTransitionProbs: %fs\n", _time);
+  // printf("PreprocessTransitionProbs NAT: %fs\n", _time_nat);
+  printf("<preprocess_transition_probs process=\"%f\" natural=\"%f\" />", _time, _time_nat);
+
+
   // This is getting all ids form InNet
   // The algorithm's input graph
   TIntV NIdsV;
@@ -26,6 +38,9 @@ void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
   int64 WalksDone = 0;
 
   // For all walks to be generated
+  
+  begin = clock();
+  begin_nat = omp_get_wtime();
   for (int64 i = 0; i < NumWalks; i++) {
 
     // This function litteraly shuffles the nodes in the vector
@@ -54,6 +69,13 @@ void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
       WalksDone++;
     }
   }
+  end = clock();
+  end_nat = omp_get_wtime();
+  _time = double(end-begin)/CLOCKS_PER_SEC;
+  _time_nat = end_nat - begin_nat;
+  // printf("All SimulateWalk: %fs\n", _time);
+  // printf("All SimulateWalk NAT: %fs\n", _time_nat);
+  printf("<simulate_walk process=\"%f\" natural=\"%f\" />", _time, _time_nat);
   
   // I think this clears the progress line (?)
   if (Verbose) {
@@ -65,7 +87,16 @@ void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
   // Function from word2vec.cpp ->
   // 
   if (!OutputWalks) {
+    begin = clock();
+    begin_nat = omp_get_wtime();
     LearnEmbeddings(WalksVV, Dimensions, WinSize, Iter, Verbose, EmbeddingsHV);
+    end = clock();
+    end_nat = omp_get_wtime();
+    _time = double(end-begin)/CLOCKS_PER_SEC;
+    _time_nat = end_nat - begin_nat;
+    // printf("LearnEmbeddings: %fs\n", _time);
+    // printf("LearnEmbeddings NAT: %fs\n", _time_nat);
+    printf("<learn_embeddings process=\"%f\" natural=\"%f\" />", _time, _time_nat);
   }
 }
 

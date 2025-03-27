@@ -31,3 +31,7 @@ Output random walks instead of embeddings. (-ow)
 
 Usage:
 ./node2vec -i:graph/karate.edgelist -o:emb/karate.emb -l:3 -d:24 -p:0.3 -dr -v
+
+
+In order to compile this for any machine (supposedly):
+g++ -static -std=c++98 -Wall -O3 -DNDEBUG -fopenmp  -o node2vec node2vec.cpp ../../snap-adv/n2v.cpp ../../snap-adv/word2vec.cpp ../../snap-adv/biasedrandomwalk.cpp ../../snap-core/Snap.o -I../../snap-core -I../../snap-adv -I../../glib-core  -lrt

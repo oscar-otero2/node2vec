@@ -1,6 +1,8 @@
 #include "stdafx.h"
 
 #include "n2v.h"
+#include <ctime>
+#include <unistd.h>
 
 #ifdef USE_OPENMP
 #include <omp.h>
@@ -158,9 +160,37 @@ int main(int argc, char* argv[]) {
   double ParamP, ParamQ;
   bool Directed, Weighted, Verbose, OutputWalks;
   
+
+  // File to write my custom output. (first arg)
+  // Super mega prone to error
+  // I need to make this creat and/or append
+  char* str = argv[1];
+  int outfile_fd = open(str, O_WRONLY | O_CREAT | O_APPEND, 0664);
+  FILE* outfile = fdopen(outfile_fd, "w");
+  
+  close(STDOUT_FILENO);
+
   // Just parses arguments to allow for execution
+
+  // This is measuring time for all cores
+  clock_t begin = clock();
+  double begin_nat = omp_get_wtime();
+
   ParseArgs(argc, argv, InFile, OutFile, Dimensions, WalkLen, NumWalks, WinSize,
    Iter, Verbose, ParamP, ParamQ, Directed, Weighted, OutputWalks);
+
+  // Empty all ParseArgs exit things
+  fflush(stdout);
+  dup2(outfile_fd, STDOUT_FILENO);
+
+  clock_t end = clock();
+  double end_nat = omp_get_wtime();
+  double time = double(end-begin) / CLOCKS_PER_SEC;
+  double time_nat = end_nat - begin_nat;
+  // printf("Time to parse %f\n", time);
+  // printf("Time to parse NAT %f\n", time_nat);
+  printf("<execution threads=\"%d\">", omp_get_max_threads());
+  printf("<parse process=\"%f\" natural=\"%f\" />", time, time_nat);
 
   // We create our super new graph
   PWNet InNet = PWNet::New();
@@ -170,14 +200,48 @@ int main(int argc, char* argv[]) {
   TVVec <TInt, int64> WalksVV;
   
   // Write InNet with our graph file
+  
+  begin = clock();
+  begin_nat = omp_get_wtime();
+  
   ReadGraph(InFile, Directed, Weighted, Verbose, InNet);
+  
+  end = clock();
+  end_nat  = omp_get_wtime();
+  time = double(end-begin) / CLOCKS_PER_SEC;
+  time_nat = end_nat - begin_nat;
+  // printf("Time to read graph %f\n", time);
+  // printf("Time to read graph NAT %f\n", time_nat);
+  printf("<read_graph process=\"%f\" natural=\"%f\" />", time, time_nat);
   
   // Apply node2vec algorithm
   // EmbeddingsHV and WalksVV have just been created
+  
+  begin = clock();
+  begin_nat = omp_get_wtime();
+  
+  printf("<node2vec>");
+
+  // Here for some reason everything gets nicely redirected
+  //close(STDOUT_FILENO);
+
   node2vec(InNet, ParamP, ParamQ, Dimensions, WalkLen, NumWalks, WinSize, Iter, 
    Verbose, OutputWalks, WalksVV, EmbeddingsHV);
 
+  end = clock();
+  end_nat = omp_get_wtime();
+  time = double(end-begin) / CLOCKS_PER_SEC;
+  time_nat = end_nat - begin_nat;
+  // printf("Time to execute node2vec %f\n", time);
+  // printf("Time to execute node2vec NAT %f\n", time_nat);
+  printf("<process>%f</process>", time);
+  printf("<natural>%f</natural>", time_nat);
+  printf("</node2vec>", time, time_nat);
+
+  printf("</execution>");
   // Write desired output (either walks or embeddings)
   WriteOutput(OutFile, EmbeddingsHV, WalksVV, OutputWalks);
+  
+  fclose(outfile);
   return 0;
 }
