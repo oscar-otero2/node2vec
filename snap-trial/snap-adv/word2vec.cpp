@@ -220,17 +220,59 @@ void LearnEmbeddings(TVVec<TInt, int64>& WalksVV, const int& Dimensions,
   }
 
   int64 WordCntAll = 0;
+
+    clock_t begin = clock();
+    double begin_nat = omp_get_wtime();
 // op RS 2016/09/26, collapse does not compile on Mac OS X
 //#pragma omp parallel for schedule(dynamic) collapse(2)
+
+    printf("<train_mode_per_thread>");
   for (int j = 0; j < Iter; j++) {
+
+   
+
+
+   //double per_thr_begin = omp_get_wtime();
+
+int thrs = omp_get_max_threads();
+double thr_times[thrs];
+double thr_end_times[thrs];
+bool started[thrs];
+for(int i = 0; i < thrs; i++){
+  thr_times[i] = 0.0;
+  thr_end_times[i] = 0.0;
+  started[i] = false;
+}
+
+int size = WalksVV.GetXDim();
+    
 #pragma omp parallel for schedule(dynamic)
     for (int64 i = 0; i < WalksVV.GetXDim(); i++) {
       // For each walk train model
       // This changes SynNeg and SynPos
+      int id = omp_get_thread_num();
+
+      if(!started[id]){
+        thr_times[omp_get_thread_num()] = omp_get_wtime();
+        started[id] = true;
+      }
+
       TrainModel(WalksVV, Dimensions, WinSize, Iter, Verbose, KTable, UTable,
-       WordCntAll, ExpTable, Alpha, i, Rnd, SynNeg, SynPos); 
+       WordCntAll, ExpTable, Alpha, i, Rnd, SynNeg, SynPos);
+
+      thr_end_times[id] = omp_get_wtime();
     }
+
+    for(int i = 0; i < thrs; i++)
+    printf("<thread id=\"%d\" natural=\"%f\" />", i, thr_end_times[i] - thr_times[i]);
+
   }
+
+    clock_t end = clock();
+    double end_nat = omp_get_wtime();
+    double _time = double(end-begin)/CLOCKS_PER_SEC;
+    double _time_nat = end_nat - begin_nat;
+  printf("<train_model process=\"%f\" natural=\"%f\" />", _time, _time_nat);
 
   if (Verbose) { printf("\n"); fflush(stdout); }
 
