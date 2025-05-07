@@ -34,7 +34,8 @@ void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
   // Prepare to generate random walks
   int64 AllWalks = (int64)NumWalks * NIdsV.Len();
   WalksVV = TVVec<TInt, int64>(AllWalks,WalkLen);
-  TRnd Rnd(time(NULL));
+  //TRnd Rnd(time(NULL));
+  TRnd Rnd(1);
   int64 WalksDone = 0;
 
   // For all walks to be generated
@@ -48,7 +49,7 @@ void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
 
     // This precompiler option schedules threads (openmp directive)
     // Applies for this for loop (iterates over all nodes)
-#pragma omp parallel for schedule(dynamic)
+//#pragma omp parallel for schedule(dynamic)
     for (int64 j = 0; j < NIdsV.Len(); j++) {
       
       // Prints by little the progress
