@@ -107,6 +107,8 @@ void TrainModel(TVVec<TInt, int64>& WalksVV, const int& Dimensions,
   for (int j = 0; j < WalksVV.GetYDim(); j++) { WalkV[j] = WalksVV(CurrWalk,j); }
 
   // For each node do everything
+  #pragma omp ordered
+  {
   for (int64 WordI=0; WordI<WalkV.Len(); WordI++) {
 
     if ( WordCntAll%10000 == 0 ) {
@@ -126,7 +128,8 @@ void TrainModel(TVVec<TInt, int64>& WalksVV, const int& Dimensions,
     }
 
     // WordI is the current node of the walk
-    int Offset = Rnd.GetUniDevInt() % WinSize;
+    //int Offset = Rnd.GetUniDevInt() % WinSize;
+    int Offset = WinSize/2;
     for (int a = Offset; a < WinSize * 2 + 1 - Offset; a++) {
       if (a == WinSize) { continue; }
       int64 CurrWordI = WordI - WinSize + a;
@@ -144,7 +147,8 @@ void TrainModel(TVVec<TInt, int64>& WalksVV, const int& Dimensions,
           Target = Word;
           Label = 1;
         } else {
-          Target = RndUnigramInt(KTable, UTable, Rnd);
+          TRnd Rnd2(1);
+          Target = RndUnigramInt(KTable, UTable, Rnd2);
           if (Target == Word) { continue; }
           Label = 0;
         }
@@ -170,7 +174,7 @@ void TrainModel(TVVec<TInt, int64>& WalksVV, const int& Dimensions,
     }
     WordCntAll++;
   }
-
+  }
 }
 
 double get_thread_cpu_time() {
@@ -221,6 +225,7 @@ void LearnEmbeddings(TVVec<TInt, int64>& WalksVV, const int& Dimensions,
   // From section 3.2.2 of node2vec's paper
   double Alpha = StartAlpha;                              //learning rate
   // Get values into ExpTable (vector of floats)
+
 #pragma omp parallel for schedule(dynamic)
   for (int i = 0; i < TableSize; i++ ) {
     double Value = -MaxExp + static_cast<double>(i) / static_cast<double>(ExpTablePrecision);
@@ -235,10 +240,14 @@ void LearnEmbeddings(TVVec<TInt, int64>& WalksVV, const int& Dimensions,
 //#pragma omp parallel for schedule(dynamic) collapse(2)
   for (int j = 0; j < Iter; j++) {
 int size = WalksVV.GetXDim();
-#pragma omp parallel for schedule(dynamic)
+
+// Without this directive, code is fully deterministic
+#pragma omp parallel for schedule(dynamic) ordered
     for (int64 i = 0; i < WalksVV.GetXDim(); i++) {
       // For each walk train model
       // This changes SynNeg and SynPos
+      
+      
       TrainModel(WalksVV, Dimensions, WinSize, Iter, Verbose, KTable, UTable,
        WordCntAll, ExpTable, Alpha, i, Rnd, SynNeg, SynPos);
       
