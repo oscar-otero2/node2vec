@@ -3,6 +3,7 @@
 #include "biasedrandomwalk.h"
 
 //Preprocess alias sampling method
+// No info from outside of these considered neighbours is being passed arround
 void GetNodeAlias(TFltV& PTblV, TIntVFltVPr& NTTable) {
   int64 N = PTblV.Len();
 
@@ -69,9 +70,10 @@ void GetNodeAlias(TFltV& PTblV, TIntVFltVPr& NTTable) {
 
 //Get random element using alias sampling method
 int64 AliasDrawInt(TIntVFltVPr& NTTable, TRnd& Rnd) {
-  int64 N = NTTable.GetVal1().Len();
+  int64 N = NTTable.GetVal1().Len(); // Num neighbors
   TInt X = static_cast<int64>(Rnd.GetUniDev()*N);
   double Y = Rnd.GetUniDev();
+  // If Random num < float from one of the random neighbors then x, else the int from that place
   return Y < NTTable.GetVal2()[X] ? X : NTTable.GetVal1()[X];
 }
 
@@ -120,12 +122,19 @@ void PreprocessNode (PWNet& InNet, const double& ParamP, const double& ParamQ,
     for (int64 j = 0; j < CurrI.GetOutDeg(); j++) {
       PTable[j] /= Psum;
     }
+    // Main result of these calculations is the PTable, unique for each node, that requires up to 2 distance neighbours for each of these
+    // Only NTTAble is being modified.
     GetNodeAlias(PTable,CurrI.GetDat().GetDat(NI.GetId()));
   }
   NCnt++;
 }
 
 //Preprocess transition probabilities for each path t->v->x
+
+///////////////////////////
+// TODO: Parallelization //
+///////////////////////////
+
 void PreprocessTransitionProbs(PWNet& InNet, const double& ParamP, const double& ParamQ, const bool& Verbose) {
   // For each node in InNet
   for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
@@ -151,9 +160,11 @@ void PreprocessTransitionProbs(PWNet& InNet, const double& ParamP, const double&
     NIds.Add(NI.GetId());
   }
 
+// This code is where computational weight falls, so this is to be parallelized
 #pragma omp parallel for schedule(dynamic)
   // Preprocess all nodes in InNet
   for (int64 i = 0; i < NIds.Len(); i++) {
+    // NCnt is mostly to be ignored as it only is used to display how much work has been done
     PreprocessNode(InNet, ParamP, ParamQ, InNet->GetNI(NIds[i]), NCnt, Verbose);
   }
   if(Verbose){ printf("\n"); }

@@ -35,3 +35,9 @@ Usage:
 
 In order to compile this for any machine (supposedly):
 g++ -static -std=c++98 -Wall -O3 -DNDEBUG -fopenmp  -o node2vec node2vec.cpp ../../snap-adv/n2v.cpp ../../snap-adv/word2vec.cpp ../../snap-adv/biasedrandomwalk.cpp ../../snap-core/Snap.o -I../../snap-core -I../../snap-adv -I../../glib-core  -lrt
+
+
+In order to compile the parallel version of biasedrandomwalk.cpp
+mpiCC -std=c++98 -Wall -O3 -DNDEBUG -fopenmp  -o biased ../../snap-adv/biasedrandomwalk-parallel.cpp ../../snap-core/Snap.o -I../../snap-core -I../../snap-adv -I../../glib-core  -lrt
+
+Creates a non static executable of its main (where to place all tests to be done)
