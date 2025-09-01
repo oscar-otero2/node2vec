@@ -809,42 +809,45 @@ void PreprocessNode (PWNet& InNet, const double& ParamP, const double& ParamQ,
 // TODO: Parallelization //
 ///////////////////////////
 
-void PreprocessTransitionProbsParallel(PWNet &InNet, const double &ParamP, const double &ParamQ, const bool &verbose){
-
-  // For each node in InNet
-  for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
-    InNet->SetNDat(NI.GetId(),TIntIntVFltVPrH());
-  }
-  
-  // For each node in InNet
-  for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
-    // For all neighbours
-    for (int64 i = 0; i < NI.GetOutDeg(); i++) {                    //allocating space in advance to avoid issues with multithreading
-      TWNet::TNodeI CurrI = InNet->GetNI(NI.GetNbrNId(i));
-      // Get node data (what is it)
-      // Add to it (as hashtable) (its id, a pair of an int vector and a float vector of the size of the out degree of the node)
-      CurrI.GetDat().AddDat(NI.GetId(),TPair<TIntV,TFltV>(TIntV(CurrI.GetOutDeg()),TFltV(CurrI.GetOutDeg())));
-    }
-  }
-
-  int64 NCnt = 0;
-  TIntV NIds;
-  
-  // For each node in InNet get its id
-  for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
-    NIds.Add(NI.GetId());
-  }
-
-  // My own process 
+void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP, const double &ParamQ, const bool &verbose){
 
   int rank, numprocs;
 
   int argc;
-  char* argv; 
+  char** argv; 
 
   MPI_Init(&argc, &argv);
   MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+
+  if(rank = 0){
+    // For each node in InNet
+    for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
+      InNet->SetNDat(NI.GetId(),TIntIntVFltVPrH());
+    }
+  
+    // For each node in InNet
+    for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
+      // For all neighbours
+      for (int64 i = 0; i < NI.GetOutDeg(); i++) {                    //allocating space in advance to avoid issues with multithreading
+        TWNet::TNodeI CurrI = InNet->GetNI(NI.GetNbrNId(i));
+        // Get node data (what is it)
+        // Add to it (as hashtable) (its id, a pair of an int vector and a float vector of the size of the out degree of the node)
+        CurrI.GetDat().AddDat(NI.GetId(),TPair<TIntV,TFltV>(TIntV(CurrI.GetOutDeg()),TFltV(CurrI.GetOutDeg())));
+      }
+    }
+
+    int64 NCnt = 0;
+    TIntV NIds;
+  
+    // For each node in InNet get its id
+    for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
+      NIds.Add(NI.GetId());
+    }
+  }
+
+  // My own process 
 
 
   int SelectedLen;
@@ -867,11 +870,6 @@ void PreprocessTransitionProbsParallel(PWNet &InNet, const double &ParamP, const
     // Proc 0 isn't sending
     for(int i = 1; i < numprocs; i++)
       RecvResult(InNet);
-
-    // Comparison against prooven result
-    PreprocessTransitionProbs(InNet2, ParamP, ParamQ, false);
-    
-    // I need to find a legitimate way to work on actual ids or something
     
     printf("Nodes\n\n");
     for(TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
@@ -893,8 +891,6 @@ void PreprocessTransitionProbsParallel(PWNet &InNet, const double &ParamP, const
 
       }
 
-      if(InNet->GetNDat(id) == InNet2->GetNDat(id))
-        printf("Node %d OK\n", id);
     }
 
   } else {
@@ -903,6 +899,7 @@ void PreprocessTransitionProbsParallel(PWNet &InNet, const double &ParamP, const
   }
 
 }
+/*
 void PreprocessTransitionProbs(PWNet& InNet, const double& ParamP, const double& ParamQ, const bool& Verbose) {
   // For each node in InNet
   for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
@@ -975,3 +972,4 @@ void SimulateWalk(PWNet& InNet, int64 StartNId, const int& WalkLen, TRnd& Rnd, T
     WalkV.Add(InNet->GetNI(Dst).GetNbrNId(Next));
   }
 }
+*/
