@@ -4,6 +4,8 @@
 #include <ctime>
 #include <unistd.h>
 
+#include <mpi.h>
+
 #ifdef USE_OPENMP
 #include <omp.h>
 #endif
@@ -161,6 +163,19 @@ int main(int argc, char* argv[]) {
   bool Directed, Weighted, Verbose, OutputWalks;
   
 
+  // Should be here at beginning
+  MPI_Init(&argc, &argv);
+  
+  int numprocs, rank;
+
+  MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  // All of this only by proc 0
+  //
+  
+  if(rank == 0){
+
   // File to write my custom output. (first arg)
   // Super mega prone to error
   // I need to make this creat and/or append
@@ -224,9 +239,16 @@ int main(int argc, char* argv[]) {
 
   // Here for some reason everything gets nicely redirected
   //close(STDOUT_FILENO);
+  
+  
+    // WE NEED PARAMP AND PARAMQ IN ALL PROCESSES
+    MPI_Bcast(&ParamP, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&ParamQ, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
+    
   node2vec(InNet, ParamP, ParamQ, Dimensions, WalkLen, NumWalks, WinSize, Iter, 
    Verbose, OutputWalks, WalksVV, EmbeddingsHV);
+
 
   end = clock();
   end_nat = omp_get_wtime();
@@ -243,5 +265,23 @@ int main(int argc, char* argv[]) {
   WriteOutput(OutFile, EmbeddingsHV, WalksVV, OutputWalks);
   
   fclose(outfile);
+
+    // Code for all other processes
+  } else {
+    
+    // Dummy initializations
+  PWNet InNet = PWNet::New();
+  TIntFltVH EmbeddingsHV;
+  TVVec <TInt, int64> WalksVV;
+
+  MPI_Bcast(&ParamP, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&ParamQ, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+  node2vec(InNet, ParamP, ParamQ, Dimensions, WalkLen, NumWalks, WinSize, Iter, 
+   Verbose, OutputWalks, WalksVV, EmbeddingsHV);
+  }
+  
+  MPI_Finalize();
+
   return 0;
 }

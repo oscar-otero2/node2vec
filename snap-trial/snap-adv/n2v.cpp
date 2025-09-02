@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "n2v.h"
 #include <ctime>
+#include <mpi.h>
 
 // Base function of node2vec
 void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
@@ -12,9 +13,21 @@ void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
   // From biasedrandomwalk.cpp ->
   // Is essentially section 3.2.2 of node2vec's paper.
   
+  int numprocs, rank;
+
+  MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  
+  if(rank == 0){
+  
   clock_t begin = clock();
   double begin_nat = omp_get_wtime();
+
+  
+
   PreprocessTransitionProbs(InNet, ParamP, ParamQ, Verbose);
+
+    
   clock_t end = clock();
   double end_nat = omp_get_wtime();
   double _time = double(end-begin)/CLOCKS_PER_SEC;
@@ -98,6 +111,14 @@ void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
     // printf("LearnEmbeddings: %fs\n", _time);
     // printf("LearnEmbeddings NAT: %fs\n", _time_nat);
     printf("<learn_embeddings process=\"%f\" natural=\"%f\" />", _time, _time_nat);
+      
+  }
+  
+    // Code for all other processes
+  } else{
+
+  PreprocessTransitionProbs(InNet, ParamP, ParamQ, Verbose);
+
   }
 }
 

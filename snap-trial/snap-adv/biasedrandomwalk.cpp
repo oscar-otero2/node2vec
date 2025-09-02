@@ -175,7 +175,7 @@ PWNet RecvChunk(int* SelectedLen, int** SelectedBuff, double ParamP, double Para
 
   // Recv WeightsBuff
   int WeightsBuff[EdgesLen];
-  MPI_Recv(WeightsBuff, EdgesLen, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+  MPI_Recv(WeightsBuff, EdgesLen, MPI_FLOAT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
 
   // Here we should reform the graph so that the return type is the actual net to be processed
@@ -238,6 +238,8 @@ void RecvResult(PWNet& InNet){
   int Proc;
   int SelectedLen;
 
+  // TODO
+  // CAN GET PROC ID FROM MPI STATUS
   MPI_Recv(&Proc, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
   MPI_Recv(&SelectedLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
   
@@ -283,10 +285,11 @@ void RecvResult(PWNet& InNet){
 
 
 // Distribution of graph between procs
+// GIVES ERRORS WITH 1 RANK ONLY
 void DistributeGraph(PWNet& InNet, int NumProcs){
 
   int NumNodes = InNet->GetNodes();
-  // NUMPROCS-1 BECAUSE WE WON'T USE RANK 0 FOR PROCESSING
+  // NUMPROCS-1 BECAUSE WE WON'T USE RANK 0 FOR PROCESSING (WE SHOULD)
   int ToBeSelected = (NumNodes / (NumProcs-1)) + 1; // Por si van de menos
 
   printf("TO BE SELECTED = %d\n", ToBeSelected);
@@ -302,6 +305,7 @@ void DistributeGraph(PWNet& InNet, int NumProcs){
   TRnd rand = TRnd();
   // TODO Check about sending this data to rank 0. Maybe do it in another way?
   // i = 1 BECAUSE IN THIS PROOF OF CONCEPT WE WON'T BE USING RANK 0 FOR PROCESSING
+  // PROBLEMS WITH ONLY 2 PROCESSES TOO
   for(int i = 1; i < NumProcs; i++){ // Get key TODO (from random node in HM)
     // This sampling is faulty
     // TWNet::TNodeI Rand = InNet->GetRndNI(rand);
@@ -580,7 +584,7 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP, const double 
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
 
-  if(rank = 0){
+  if(rank == 0){
     // For each node in InNet
     for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
       InNet->SetNDat(NI.GetId(),TIntIntVFltVPrH());

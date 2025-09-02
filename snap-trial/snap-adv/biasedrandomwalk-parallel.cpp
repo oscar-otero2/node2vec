@@ -155,7 +155,8 @@ void SendChunk(THash<TInt, TBool> Selected, THash<TPair<TInt, TInt>, TFlt> Edges
 PWNet RecvChunk(int* SelectedLen, int** SelectedBuff, double ParamP, double ParamQ, int Proc){ // Proc is rank 0 in this case
   
   // Recv SelectedLen
-  MPI_Recv(SelectedLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Recv(SelectedLen, 1, MPI_INT, Proc, , MPI_COMM_WORLD, MPI_STATUS_IGNORE);
   
   // Create all selected's buffer
   
