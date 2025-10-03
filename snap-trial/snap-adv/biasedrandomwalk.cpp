@@ -3,6 +3,8 @@
 #include "biasedrandomwalk.h"
 
 #include <cstdio>
+#include <ctime>
+#include <iterator>
 #include <mpi.h>
 
 
@@ -114,7 +116,8 @@ void SendChunk(THash<TInt, TBool> Selected, THash<TPair<TInt, TInt>, TFlt> Edges
   // Recv will create buffer to receive all nodes
   
   
-  int SelectedBuff[SelectedLen];
+  //int SelectedBuff[SelectedLen];
+  int* SelectedBuff = (int*) malloc(SelectedLen*sizeof(int));
   // Nasty loop
   int j = 0;
   for(THash<TInt, TBool>::TIter i = Selected.BegI(); !i.IsEnd(); i.Next()){
@@ -131,8 +134,12 @@ void SendChunk(THash<TInt, TBool> Selected, THash<TPair<TInt, TInt>, TFlt> Edges
   // Recv will create a buffer for all edges
   // We'll use two buffs, one for edge nodes, and the other for edge weights
   
-  int EdgesBuff[EdgesLen*2];
-  float WeightsBuff[EdgesLen];
+  //int EdgesBuff[EdgesLen*2];
+  //float WeightsBuff[EdgesLen];
+  
+  int* EdgesBuff = (int*) malloc(EdgesLen*2*sizeof(int));
+  float* WeightsBuff = (float*) malloc(EdgesLen*sizeof(float));
+
   // Nasty loop
   j = 0;
   for(THash<TPair<TInt, TInt>, TFlt>::TIter i = Edges.BegI(); !i.IsEnd(); i.Next()){
@@ -146,6 +153,9 @@ void SendChunk(THash<TInt, TBool> Selected, THash<TPair<TInt, TInt>, TFlt> Edges
   MPI_Send(EdgesBuff, EdgesLen*2, MPI_INT, Proc, 0, MPI_COMM_WORLD);
   MPI_Send(WeightsBuff, EdgesLen, MPI_FLOAT, Proc, 0, MPI_COMM_WORLD);
 
+  free(SelectedBuff);
+  free(EdgesBuff);
+  free(WeightsBuff);
   
 }
 
@@ -162,26 +172,25 @@ PWNet RecvChunk(int* SelectedLen, int** SelectedBuff, double ParamP, double Para
   *SelectedBuff = (int*) malloc(*SelectedLen*sizeof(int));
   MPI_Recv(*SelectedBuff, *SelectedLen, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-  for(int i = 0; i < *SelectedLen; i++)
-    printf("process %d\n", (*SelectedBuff)[i]);
 
   // Recv EdgesLen
   int EdgesLen;
   MPI_Recv(&EdgesLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
   // Recv EdgesBuff
-  int EdgesBuff[EdgesLen*2];
+  //int EdgesBuff[EdgesLen*2];
+  int* EdgesBuff = (int*) malloc(EdgesLen*2*sizeof(int));
   MPI_Recv(EdgesBuff, EdgesLen*2, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
   // Recv WeightsBuff
-  int WeightsBuff[EdgesLen];
+  //float WeightsBuff[EdgesLen];
+  float* WeightsBuff = (float*) malloc(EdgesLen*sizeof(float));
   MPI_Recv(WeightsBuff, EdgesLen, MPI_FLOAT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
 
   // Here we should reform the graph so that the return type is the actual net to be processed
   // and some way of knowing which of the nodes shall be used for processing later
   
-  printf("Could receive\n");
 
   // Create this network
   PWNet ProcNet = PWNet::New();
@@ -202,12 +211,16 @@ PWNet RecvChunk(int* SelectedLen, int** SelectedBuff, double ParamP, double Para
     PreprocessNodeParallel(ProcNet, ParamP, ParamQ, ProcNet->GetNI((*SelectedBuff)[i]));
   }
   
+  free(EdgesBuff);
+  free(WeightsBuff);
+  
   return ProcNet;
 }
 
 void SendResult(PWNet& ProcNet, int SelectedLen, int* SelectedBuff, int SelfProc, int Proc){
 
-  int Lens[SelectedLen];
+  //int Lens[SelectedLen];
+  int* Lens = (int*) malloc(SelectedLen*sizeof(int));
   char** SendBuff = (char**) malloc(SelectedLen * sizeof(char*));
   
   for(int i = 0; i < SelectedLen; i++){
@@ -229,6 +242,7 @@ void SendResult(PWNet& ProcNet, int SelectedLen, int* SelectedBuff, int SelfProc
     MPI_Send(SendBuff[i], Lens[i], MPI_BYTE, Proc, 0, MPI_COMM_WORLD);
   }
 
+  free(Lens);
   free(SendBuff);
 
 }
@@ -243,9 +257,12 @@ void RecvResult(PWNet& InNet){
   MPI_Recv(&Proc, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
   MPI_Recv(&SelectedLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
   
-  int SelectedBuff[SelectedLen];
-  int Lens[SelectedLen];
-  int Displs[SelectedLen];
+  //int SelectedBuff[SelectedLen];
+  //int Lens[SelectedLen];
+  //int Displs[SelectedLen];
+  int* SelectedBuff = (int*) malloc(SelectedLen*sizeof(int));
+  int* Lens = (int*) malloc(SelectedLen*sizeof(int));
+  int* Displs = (int*) malloc(SelectedLen*sizeof(int));
 
   MPI_Recv(SelectedBuff, SelectedLen, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
   MPI_Recv(Lens, SelectedLen, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -269,7 +286,6 @@ void RecvResult(PWNet& InNet){
     MPI_Recv(RecvBuff[i], Lens[i], MPI_BYTE, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
   }
   
-  printf("Could recv");
   
   // Here re-transform these RecvBuff into hashes and insert them into their respective nodes
   for(int i = 0; i < SelectedLen; i++){
@@ -281,6 +297,10 @@ void RecvResult(PWNet& InNet){
     free(RecvBuff[i]);
   }
   free(RecvBuff);
+  
+  free(SelectedBuff);
+  free(Lens);
+  free(Displs);
 }
 
 
@@ -290,9 +310,15 @@ void DistributeGraph(PWNet& InNet, int NumProcs){
 
   int NumNodes = InNet->GetNodes();
   // NUMPROCS-1 BECAUSE WE WON'T USE RANK 0 FOR PROCESSING (WE SHOULD)
+  
+  if(NumProcs == 1){
+    for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
+      PreprocessNodeParallel(InNet, 1.0, 1.0, InNet->GetNI(NI.GetId()));
+    }
+  }
+
   int ToBeSelected = (NumNodes / (NumProcs-1)) + 1; // Por si van de menos
 
-  printf("TO BE SELECTED = %d\n", ToBeSelected);
   // Create HM of all nodes
   THash<TInt, TBool> HM;
   for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
@@ -353,19 +379,7 @@ void DistributeGraph(PWNet& InNet, int NumProcs){
     
     THash<TInt, TBool> Additional = BFSStep(InNet, HM, Selected, Selected, Edges, false);
     
-    
-    printf("Nodes: \n\n");
-    for(THash<TInt, TBool>::TIter i = Selected.BegI(); !i.IsEnd(); i.Next()){
-      printf("%d\n", i.GetKey());
-    }
 
-    printf("Edges:\n\n");
-    for(THash<TPair<TInt, TInt>, TFlt>::TIter i = Edges.BegI(); !i.IsEnd(); i.Next()){
-      TPair<TInt, TInt> edge = i.GetKey();
-      printf("%d\t%d\t:\t%f\n", edge.GetVal1(), edge.GetVal2(), i.GetDat());
-    }
-    
-    printf("Sending to %d\n", i);
     SendChunk(Selected, Edges, i);
     
   }
@@ -617,11 +631,23 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP, const double 
   int* SelectedBuff;
   PWNet ProcNet;
   if(rank == 0){
+
+    clock_t begin = clock();
+    double begin_nat = omp_get_wtime();
+
     DistributeGraph(InNet, numprocs);
+    
+    clock_t end = clock();
+    double end_nat = omp_get_wtime();
+
+    double _time = double(end-begin) / CLOCKS_PER_SEC;
+    double _time_nat = end_nat - begin_nat;
+
+    printf("<distribution process=\"%f\" natural=\"%f\" />", _time, _time_nat);
+
   } else {
     // Already Processed
     ProcNet = RecvChunk(&SelectedLen, &SelectedBuff, ParamP, ParamQ, 0);
-    printf("rank %d done\n", rank);
     
     
     // We shall rejoin data once again here
@@ -631,25 +657,33 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP, const double 
   // Gathering seems functional
   if(rank == 0){
     // Proc 0 isn't sending
+    
+    clock_t begin = clock();
+    double begin_nat = omp_get_wtime();
+
     for(int i = 1; i < numprocs; i++)
       RecvResult(InNet);
     
-    printf("Nodes\n\n");
+    
+    clock_t end = clock();
+    double end_nat = omp_get_wtime();
+
+    double _time = double(end-begin) / CLOCKS_PER_SEC;
+    double _time_nat = end_nat - begin_nat;
+
+    printf("<graph_processing process=\"%f\" natural=\"%f\" />", _time, _time_nat);
+    
+
     for(TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
       int id = NI.GetId();
-      printf("\n%d\n", id);
 
       TIntIntVFltVPrH data = InNet->GetNDat(id);
-      if(data.Empty()) printf("Something wrong\n");
+      if(data.Empty()) printf("Something wrong\n"); // Better to throw some error
 
       for(THash<TInt, TIntVFltVPr>::TIter i = data.BegI(); !i.IsEnd(); i.Next()){
         TIntVFltVPr vect = data.GetDat(i.GetKey());
         TIntV intv = vect.GetVal1();
         TFltV fltv = vect.GetVal2();
-
-        for(int j = 0; j < intv.Len(); j++){
-          printf("\t(%d  %f)\n", intv[j], fltv[j]);
-        }
 
 
       }

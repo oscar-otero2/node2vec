@@ -23,6 +23,7 @@ void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
   clock_t begin = clock();
   double begin_nat = omp_get_wtime();
 
+  printf("<preprocess_transition_probs>");
   
 
   PreprocessTransitionProbs(InNet, ParamP, ParamQ, Verbose);
@@ -32,9 +33,11 @@ void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
   double end_nat = omp_get_wtime();
   double _time = double(end-begin)/CLOCKS_PER_SEC;
   double _time_nat = end_nat - begin_nat;
-  // printf("PreprocessTransitionProbs: %fs\n", _time);
-  // printf("PreprocessTransitionProbs NAT: %fs\n", _time_nat);
-  printf("<preprocess_transition_probs process=\"%f\" natural=\"%f\" />", _time, _time_nat);
+
+  //printf("<preprocess_transition_probs process=\"%f\" natural=\"%f\" />", _time, _time_nat);
+  printf("<process>%f</process>", _time);
+  printf("<natural>%f</natural>", _time_nat);
+  printf("</preprocess_transition_probs>");
 
 
   // This is getting all ids form InNet
