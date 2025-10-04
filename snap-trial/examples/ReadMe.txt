@@ -42,3 +42,4 @@ A description of examples is provided in snap/ReadMe.txt.
 SNAP documentation:
   http://snap.stanford.edu/snap/doc.html
 
+Executing is so fun
