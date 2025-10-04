@@ -403,7 +403,8 @@ void PreprocessNodeParallel (PWNet& InNet, const double& ParamP, const double& P
     InNet->SetNDat(NI.GetId(),TIntIntVFltVPrH());
 
     // Allocate the necessary space in the hashtable (only for the node to be calc'd)
-    for (int64 i = 0; i < NI.GetOutDeg(); i++) {                    //allocating space in advance to avoid issues with multithreading
+  // With this horrifying fix that gets full deg, the code now works on cluster environment wtf
+    for (int64 i = 0; i < NI.GetDeg(); i++) {                    //allocating space in advance to avoid issues with multithreading
       TWNet::TNodeI CurrI = InNet->GetNI(NI.GetNbrNId(i));
       // Get node data (what is it)
       // Add to it (as hashtable) (its id, a pair of an int vector and a float vector of the size of the out degree of the node)
