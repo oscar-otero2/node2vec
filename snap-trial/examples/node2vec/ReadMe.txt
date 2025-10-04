@@ -42,4 +42,4 @@ mpiCC -std=c++98 -Wall -O3 -DNDEBUG -fopenmp  -o biased ../../snap-adv/biasedran
 
 Creates a non static executable of its main (where to place all tests to be done)
 
-mpiCC -std=c++98 -Wall -O3 -DNDEBUG -fopenmp  -o biased ../../snap-adv/biasedrandomwalk-parallel.cpp ../../snap-core/Snap.o -I../../snap-core -I../../snap-adv -I../../glib-core  -lrt -fsanitize=address -g
+mpiCC -std=c++98 -Wall -O3 -DNDEBUG -fopenmp  -o node2vec node2vec.cpp ../../snap-adv/n2v.cpp ../../snap-adv/word2vec.cpp ../../snap-adv/biasedrandomwalk.cpp ../../snap-core/Snap.o -I../../snap-core -I../../snap-adv -I../../glib-core  -lrt -fsanitize=address -g
