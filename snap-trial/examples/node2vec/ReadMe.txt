@@ -41,3 +41,5 @@ In order to compile the parallel version of biasedrandomwalk.cpp
 mpiCC -std=c++98 -Wall -O3 -DNDEBUG -fopenmp  -o biased ../../snap-adv/biasedrandomwalk-parallel.cpp ../../snap-core/Snap.o -I../../snap-core -I../../snap-adv -I../../glib-core  -lrt
 
 Creates a non static executable of its main (where to place all tests to be done)
+
+mpiCC -std=c++98 -Wall -O3 -DNDEBUG -fopenmp  -o biased ../../snap-adv/biasedrandomwalk-parallel.cpp ../../snap-core/Snap.o -I../../snap-core -I../../snap-adv -I../../glib-core  -lrt -fsanitize=address -g
