@@ -2,6 +2,7 @@
 #include "Snap.h"
 #include "biasedrandomwalk.h"
 
+#include <vector>
 #include <cstdio>
 #include <ctime>
 #include <iterator>
@@ -220,9 +221,22 @@ PWNet RecvChunk(int* SelectedLen, int** SelectedBuff, double ParamP, double Para
 void SendResult(PWNet& ProcNet, int SelectedLen, int* SelectedBuff, int SelfProc, int Proc){
 
   //int Lens[SelectedLen];
-  int* Lens = (int*) malloc(SelectedLen*sizeof(int));
+  //int* Lens = (int*) malloc(SelectedLen*sizeof(int));
   char** SendBuff = (char**) malloc(SelectedLen * sizeof(char*));
   
+  std::vector<std::vector<char> > buffers(SelectedLen);
+  std::vector<int> Lens(SelectedLen);
+  for (int i = 0; i < SelectedLen; ++i) {
+    TMOut stream;
+    TIntIntVFltVPrH hash = ProcNet->GetNDat(SelectedBuff[i]);
+    hash.Save(stream);
+    Lens[i] = stream.Len();
+    buffers[i].resize(Lens[i]);
+    memcpy(buffers[i].data(), stream.GetBfAddr(), Lens[i]);
+  }
+  // now send buffers[i].data() safely; no leaking pointers to TMOut internals
+
+  /*
   for(int i = 0; i < SelectedLen; i++){
 
     TIntIntVFltVPrH hash = ProcNet->GetNDat(SelectedBuff[i]);
@@ -232,76 +246,69 @@ void SendResult(PWNet& ProcNet, int SelectedLen, int* SelectedBuff, int SelfProc
     Lens[i] = stream->Len();
     SendBuff[i] = stream->GetBfAddr();
   }
+  */
   
   MPI_Send(&SelfProc, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
   MPI_Send(&SelectedLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
   MPI_Send(SelectedBuff, SelectedLen, MPI_INT, Proc, 0, MPI_COMM_WORLD);
-  MPI_Send(Lens, SelectedLen, MPI_INT, Proc, 0, MPI_COMM_WORLD);
+  MPI_Send(Lens.data(), SelectedLen, MPI_INT, Proc, 0, MPI_COMM_WORLD);
 
   for(int i = 0; i < SelectedLen; i++){
-    MPI_Send(SendBuff[i], Lens[i], MPI_BYTE, Proc, 0, MPI_COMM_WORLD);
+    //MPI_Send(SendBuff[i], Lens[i], MPI_BYTE, Proc, 0, MPI_COMM_WORLD);
+    MPI_Send(buffers[i].data(), Lens[i], MPI_BYTE, Proc, 0, MPI_COMM_WORLD);
   }
 
-  free(Lens);
   free(SendBuff);
+  free(SelectedBuff);
 
 }
 
 void RecvResult(PWNet& InNet){
-  
   int Proc;
   int SelectedLen;
 
-  // TODO
-  // CAN GET PROC ID FROM MPI STATUS
-  MPI_Recv(&Proc, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+  MPI_Status status;
+  MPI_Recv(&Proc, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
   MPI_Recv(&SelectedLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-  
-  //int SelectedBuff[SelectedLen];
-  //int Lens[SelectedLen];
-  //int Displs[SelectedLen];
+
   int* SelectedBuff = (int*) malloc(SelectedLen*sizeof(int));
   int* Lens = (int*) malloc(SelectedLen*sizeof(int));
   int* Displs = (int*) malloc(SelectedLen*sizeof(int));
 
   MPI_Recv(SelectedBuff, SelectedLen, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
   MPI_Recv(Lens, SelectedLen, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
- 
-  // Setup displs (only needed if only one send later)
+
   int Displ = 0;
   for(int i = 0; i < SelectedLen; i++){
     Displs[i] = Displ;
     Displ += Lens[i];
   }
-  
-  // Allocing mem for this send
+
+  // Allocate and receive each buffer separately
   char** RecvBuff = (char**) malloc(SelectedLen * sizeof(char*));
   for(int i = 0; i < SelectedLen; i++){
     RecvBuff[i] = (char*) malloc(Lens[i] * sizeof(char));
-    //printf("Lens[%d] = %d\n", i, Lens[i]);
-  }
-
-  // Maybe change this with only one (1) send and recv
-  for(int i = 0; i < SelectedLen; i++){
     MPI_Recv(RecvBuff[i], Lens[i], MPI_BYTE, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
   }
-  
-  
-  // Here re-transform these RecvBuff into hashes and insert them into their respective nodes
+
+  // Reconstruct hashes from incoming buffers (no new TMIn)
   for(int i = 0; i < SelectedLen; i++){
-    TMIn* inFor = new TMIn(RecvBuff[i], Lens[i], false);
-    InNet->SetNDat(SelectedBuff[i], TIntIntVFltVPrH(*inFor));
+    TMIn inFor((const void*)RecvBuff[i], Lens[i], false);   // stack TMIn
+    TIntIntVFltVPrH hash(inFor);                            // construct hash from stream
+    InNet->SetNDat(SelectedBuff[i], hash);
   }
-  
+
+  // free the buffers
   for(int i = 0; i < SelectedLen; i++){
     free(RecvBuff[i]);
   }
   free(RecvBuff);
-  
+
   free(SelectedBuff);
   free(Lens);
   free(Displs);
 }
+
 
 
 // Distribution of graph between procs
@@ -371,9 +378,9 @@ void DistributeGraph(PWNet& InNet, int NumProcs){
         // Oof, evil gotos and continues
         continue;
       }
-      for(THash<TInt, TBool>::TIter i = LastStep.BegI(); !i.IsEnd(); i.Next()){
-        Selected.AddKey(i.GetKey());
-        HM.DelKey(i.GetKey());
+      for(THash<TInt, TBool>::TIter j = LastStep.BegI(); !j.IsEnd(); j.Next()){
+        Selected.AddKey(j.GetKey());
+        HM.DelKey(j.GetKey());
       }
     }
     
