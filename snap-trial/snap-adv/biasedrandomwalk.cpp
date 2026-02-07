@@ -536,9 +536,8 @@ void RecvResult(PWNet &InNet) {
 
 // Distribution of graph between procs
 // GIVES ERRORS WITH 1 RANK ONLY
-void DistributeGraph(PWNet &InNet, int NumProcs, int ParamP, int ParamQ) {
+void DistributeGraph(PWNet &InNet, int NumProcs, int ParamP, int ParamQ, THash<TInt, TBool>& SelectedRank0) {
 
-  THash<TInt, TBool> SelectedRank0;
   int NumNodes = InNet->GetNodes();
   // NUMPROCS-1 BECAUSE WE WON'T USE RANK 0 FOR PROCESSING (WE SHOULD)
 
@@ -621,10 +620,12 @@ void DistributeGraph(PWNet &InNet, int NumProcs, int ParamP, int ParamQ) {
   }
 
   // Process nodes for graph in rank 0
+  /*
   for (THash<TInt, TBool>::TIter i = SelectedRank0.BegI(); !i.IsEnd(); i++) {
     PreprocessNodeParallel(InNet, ParamP, ParamQ,
                            InNet->GetNI(i.GetKey()));
   }
+  */
 
 }
 
@@ -891,10 +892,12 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
   PWNet ProcNet;
   if (rank == 0) {
 
+    THash<TInt, TBool> SelectedRank0;
+
     clock_t begin = clock();
     double begin_nat = omp_get_wtime();
 
-    DistributeGraph(InNet, numprocs, ParamP, ParamQ);
+    DistributeGraph(InNet, numprocs, ParamP, ParamQ, SelectedRank0);
 
     clock_t end = clock();
     double end_nat = omp_get_wtime();
@@ -903,6 +906,11 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     double _time_nat = end_nat - begin_nat;
 
     printf("<distribution process=\"%f\" natural=\"%f\" />", _time, _time_nat);
+
+  for (THash<TInt, TBool>::TIter i = SelectedRank0.BegI(); !i.IsEnd(); i++) {
+    PreprocessNodeParallel(InNet, ParamP, ParamQ,
+                           InNet->GetNI(i.GetKey()));
+  }
 
   } else {
     // Already Processed
