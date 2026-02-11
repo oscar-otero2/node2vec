@@ -34,11 +34,12 @@ void PrintH(TIntIntVFltVPrH data) {
   } while (data.FNextKeyId(keyId));
 }
 
+// TODO: add only needed nodes
 THash<TInt, TBool> BFSStep(PWNet &InNet, const THash<TInt, TBool> &HM,
                            const THash<TInt, TBool> &LastStep,
                            THash<TInt, TBool> &Selected,
                            THash<TPair<TInt, TInt>, TFlt> &Edges,
-                           bool OnlyOut) {
+                           int ToBeSelected, bool OnlyOut) {
   // Iterate over HM (probs won't work)
 
   THash<TInt, TBool> ThisStep;
@@ -78,6 +79,7 @@ THash<TInt, TBool> BFSStep(PWNet &InNet, const THash<TInt, TBool> &HM,
     return ThisStep;
   }
 
+  // Here only get up to ToBeSelected (If this step gets to that size return)
   for (THash<TInt, TBool>::TIter i = LastStep.BegI(); !i.IsEnd(); i.Next()) {
     // Get node that has id i
     // Iterate through neighbors
@@ -101,6 +103,9 @@ THash<TInt, TBool> BFSStep(PWNet &InNet, const THash<TInt, TBool> &HM,
 
         // printf("new nodes: %d\n", n);
       }
+    }
+    if (ThisStep.Len() >= ToBeSelected) {
+      break;
     }
   }
   return ThisStep;
@@ -219,10 +224,22 @@ PWNet RecvChunk(int *SelectedLen, int **SelectedBuff, double ParamP,
   }
   // Return Selected in some incredible way
 
+  clock_t begin = clock();
+  double begin_nat = omp_get_wtime();
+
   for (int i = 0; i < *SelectedLen; i++) {
     PreprocessNodeParallel(ProcNet, ParamP, ParamQ,
                            ProcNet->GetNI((*SelectedBuff)[i]));
   }
+
+  clock_t end = clock();
+  double end_nat = omp_get_wtime();
+
+  double _time = double(end - begin) / CLOCKS_PER_SEC;
+  double _time_nat = end_nat - begin_nat;
+
+  printf("<processing rank=\"%d\" process=\"%f\" natural=\"%f\" />", Proc,
+         _time, _time_nat);
 
   free(EdgesBuff);
   free(WeightsBuff);
@@ -255,7 +272,7 @@ void sendKeyDatV(std::vector<int> &Lens, int i, TMOut &stream, int Proc,
 }
 */
 
-void sendHM(TIntIntVFltVPrH& hash, int Proc) {
+void sendHM(TIntIntVFltVPrH &hash, int Proc) {
   // Firstly send total size
   int Len = hash.Len();
   MPI_Send(&Len, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
@@ -266,10 +283,10 @@ void sendHM(TIntIntVFltVPrH& hash, int Proc) {
   TMOut streamKey;
   int streamKeyLen;
 
-  for(THashKeyDatI<TInt, TIntVFltVPr> i = hash.BegI(); !i.IsEnd(); i++){
+  for (THashKeyDatI<TInt, TIntVFltVPr> i = hash.BegI(); !i.IsEnd(); i++) {
     TIntVFltVPr dat = i.GetDat();
     TInt key = i.GetKey();
-    
+
     // Data sending
     dat.Save(streamDat);
     streamDatLen = streamDat.Len();
@@ -280,7 +297,6 @@ void sendHM(TIntIntVFltVPrH& hash, int Proc) {
     MPI_Send(&streamDatLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
     MPI_Send(bufferDat.data(), streamDatLen, MPI_BYTE, Proc, 0, MPI_COMM_WORLD);
     // Data sent
-
 
     // Key sending
     key.Save(streamKey);
@@ -293,29 +309,28 @@ void sendHM(TIntIntVFltVPrH& hash, int Proc) {
     MPI_Send(bufferKey.data(), streamKeyLen, MPI_BYTE, Proc, 0, MPI_COMM_WORLD);
     // Key sent
 
-
     streamDat.Clr();
     streamKey.Clr();
   }
 }
 
-void recvHM(TIntIntVFltVPrH& hash, int Proc){
+void recvHM(TIntIntVFltVPrH &hash, int Proc) {
   // First recv total hash len
   int Len;
   MPI_Recv(&Len, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-  
+
   // Dat variables
-  char* DatBuf;
+  char *DatBuf;
   int DatLen;
   int StreamDatLen;
-  
+
   // Key variables
-  char* KeyBuf;
+  char *KeyBuf;
   int KeyLen;
   int StreamKeyLen;
 
-  for(int i = 0; i < Len; i++){
-  
+  for (int i = 0; i < Len; i++) {
+
     TIntVFltVPr dat;
     TInt key;
 
@@ -328,9 +343,8 @@ void recvHM(TIntIntVFltVPrH& hash, int Proc){
 
     TMIn inDat(DatBuf, StreamDatLen, true);
     dat.Load(inDat);
-    //free(DatBuf); NOT NEEDED
-    // Recv data done
-    
+    // free(DatBuf); NOT NEEDED
+    //  Recv data done
 
     // Recv key
     MPI_Recv(&StreamKeyLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD,
@@ -341,9 +355,9 @@ void recvHM(TIntIntVFltVPrH& hash, int Proc){
 
     TMIn inKey(KeyBuf, StreamKeyLen, true);
     key.Load(inKey);
-    //free(KeyBuf); // NOT NEEDED
-    // Recv key done
-    
+    // free(KeyBuf); // NOT NEEDED
+    //  Recv key done
+
     hash.AddDat(key, dat);
   }
 }
@@ -390,7 +404,7 @@ void SendResult(PWNet &ProcNet, int SelectedLen, int *SelectedBuff,
   MPI_Send(&SelectedLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
   MPI_Send(SelectedBuff, SelectedLen, MPI_INT, Proc, 0, MPI_COMM_WORLD);
   for (int i = 0; i < SelectedLen; ++i) {
-    //TMOut stream;
+    // TMOut stream;
     TIntIntVFltVPrH hash = ProcNet->GetNDat(SelectedBuff[i]);
 
     /*
@@ -439,7 +453,7 @@ void SendResult(PWNet &ProcNet, int SelectedLen, int *SelectedBuff,
     MPI_Send(&Lens[i], 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
     MPI_Send(buffer.data(), Lens[i], MPI_BYTE, Proc, 0, MPI_COMM_WORLD);
     */
-    
+
     sendHM(hash, Proc);
   }
 
@@ -524,7 +538,7 @@ void RecvResult(PWNet &InNet) {
       hash.loadFreeKeys(in);
     }
     */
-    
+
     recvHM(hash, Proc);
 
     InNet->SetNDat(SelectedBuff[i], hash);
@@ -536,16 +550,19 @@ void RecvResult(PWNet &InNet) {
 
 // Distribution of graph between procs
 // GIVES ERRORS WITH 1 RANK ONLY
-void DistributeGraph(PWNet &InNet, int NumProcs, int ParamP, int ParamQ, THash<TInt, TBool>& SelectedRank0) {
+void DistributeGraph(PWNet &InNet, int NumProcs, int ParamP, int ParamQ,
+                     THash<TInt, TBool> &SelectedRank0, PWNet &ProcNet0) {
 
   int NumNodes = InNet->GetNodes();
   // NUMPROCS-1 BECAUSE WE WON'T USE RANK 0 FOR PROCESSING (WE SHOULD)
 
+  /*
   if (NumProcs == 1) {
     for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
       PreprocessNodeParallel(InNet, 1.0, 1.0, InNet->GetNI(NI.GetId()));
     }
   }
+  */
 
   int ToBeSelected = (NumNodes / (NumProcs)) + 1; // Por si van de menos
 
@@ -561,12 +578,16 @@ void DistributeGraph(PWNet &InNet, int NumProcs, int ParamP, int ParamQ, THash<T
   // TODO Check about sending this data to rank 0. Maybe do it in another way?
   // i = 1 BECAUSE IN THIS PROOF OF CONCEPT WE WON'T BE USING RANK 0 FOR
   // PROCESSING PROBLEMS WITH ONLY 2 PROCESSES TOO
+
   for (int i = 0; i < NumProcs; i++) { // Get key TODO (from random node in HM)
     // This sampling is faulty
     // TWNet::TNodeI Rand = InNet->GetRndNI(rand);
 
     // Horible sampling
-    int Rand = HM.BegI().GetKey();
+    // int Rand = HM.BegI().GetKey();
+    // Rand has to bee the actual node key (node id)
+
+    int Rand = HM.GetKey(HM.GetRndKeyId(rand));
 
     THash<TInt, TBool> Selected;
     THash<TInt, TBool> LastStep;
@@ -587,35 +608,61 @@ void DistributeGraph(PWNet &InNet, int NumProcs, int ParamP, int ParamQ, THash<T
     // Only out edges until last iteration, when we'll get in and out ones
 
     while (Selected.Len() < ToBeSelected && !HM.Empty()) {
-      LastStep = BFSStep(InNet, HM, LastStep, Selected, Edges, true);
+      LastStep = BFSStep(InNet, HM, LastStep, Selected, Edges,
+                         ToBeSelected - Selected.Len(), true);
       if (LastStep.Empty()) {
 
         // This method is scarily biased, but random sampling of the hash is
         // faulty as it returns nonexistant ids over and over (0)
-        int NewKey = HM.BegI().GetKey();
+        // int NewKey = HM.BegI().GetKey();
+        int NewKey = HM.GetKey(HM.GetRndKeyId(rand));
         Selected.AddKey(NewKey);
         HM.DelKey(NewKey);
 
         // Oof, evil gotos and continues
         continue;
-      }
-      for (THash<TInt, TBool>::TIter j = LastStep.BegI(); !j.IsEnd();
-           j.Next()) {
-        Selected.AddKey(j.GetKey());
-        HM.DelKey(j.GetKey());
+      } else {
+        for (THash<TInt, TBool>::TIter j = LastStep.BegI(); !j.IsEnd();
+             j.Next()) {
+          Selected.AddKey(j.GetKey());
+          HM.DelKey(j.GetKey());
+        }
       }
     }
 
     THash<TInt, TBool> Additional =
-        BFSStep(InNet, HM, Selected, Selected, Edges, false);
+        BFSStep(InNet, HM, Selected, Selected, Edges, 0, false);
 
-
+    printf("\nFor rank %d selected (%d nodes) and (%d edges)", i,
+           Selected.Len(), Edges.Len());
     // We'll use the first it for rank 0's data
-    if (i == 0){
+    if (i == 0) {
+      PWNet ProcNet = PWNet::New();
+
+      for (THash<TPair<TInt, TInt>, TFlt>::TIter i = Edges.BegI(); !i.IsEnd();
+           i++) {
+        int node1, node2;
+        TPair<TInt, TInt> pr = i.GetKey();
+        TFlt w = i.GetDat();
+        node1 = pr.GetVal1();
+        node2 = pr.GetVal2();
+
+        if (!ProcNet->IsNode(node1)) {
+          ProcNet->AddNode(node1);
+        }
+        if (!ProcNet->IsNode(node2)) {
+          ProcNet->AddNode(node2);
+        }
+
+        ProcNet->AddEdge(node1, node2, w);
+      }
+
+      ProcNet0 = ProcNet;
       SelectedRank0 = Selected;
+      printf("Len -> %d\n", Selected.Len());
     } else {
       SendChunk(Selected, Edges, i);
-
+      printf("Len -> %d\n", Selected.Len());
     }
   }
 
@@ -626,7 +673,6 @@ void DistributeGraph(PWNet &InNet, int NumProcs, int ParamP, int ParamQ, THash<T
                            InNet->GetNI(i.GetKey()));
   }
   */
-
 }
 
 void PreprocessNodeParallel(PWNet &InNet, const double &ParamP,
@@ -890,14 +936,13 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
   int SelectedLen;
   int *SelectedBuff;
   PWNet ProcNet;
+  THash<TInt, TBool> SelectedRank0;
   if (rank == 0) {
-
-    THash<TInt, TBool> SelectedRank0;
 
     clock_t begin = clock();
     double begin_nat = omp_get_wtime();
 
-    DistributeGraph(InNet, numprocs, ParamP, ParamQ, SelectedRank0);
+    DistributeGraph(InNet, numprocs, ParamP, ParamQ, SelectedRank0, ProcNet);
 
     clock_t end = clock();
     double end_nat = omp_get_wtime();
@@ -907,10 +952,22 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
 
     printf("<distribution process=\"%f\" natural=\"%f\" />", _time, _time_nat);
 
-  for (THash<TInt, TBool>::TIter i = SelectedRank0.BegI(); !i.IsEnd(); i++) {
-    PreprocessNodeParallel(InNet, ParamP, ParamQ,
-                           InNet->GetNI(i.GetKey()));
-  }
+    begin = clock();
+    begin_nat = omp_get_wtime();
+
+    for (THash<TInt, TBool>::TIter i = SelectedRank0.BegI(); !i.IsEnd(); i++) {
+      PreprocessNodeParallel(ProcNet, ParamP, ParamQ,
+                             ProcNet->GetNI(i.GetKey()));
+    }
+
+    end = clock();
+    end_nat = omp_get_wtime();
+
+    _time = double(end - begin) / CLOCKS_PER_SEC;
+    _time_nat = end_nat - begin_nat;
+
+    printf("<process rank=\"0\" len=\"%d\" process=\"%f\" natural=\"%f\" />",
+           SelectedRank0.Len(), _time, _time_nat);
 
   } else {
     // Already Processed
@@ -927,6 +984,12 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     clock_t begin = clock();
     double begin_nat = omp_get_wtime();
 
+    // "Recv" from actual proc0 ProcNet
+    for (THash<TInt, TBool>::TIter i = SelectedRank0.BegI(); !i.IsEnd(); i++) {
+      TInt node = i.GetKey();
+      InNet->SetNDat(node, ProcNet->GetNDat(node));
+    }
+
     for (int i = 1; i < numprocs; i++) {
       RecvResult(InNet);
     }
@@ -942,6 +1005,7 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     printf("<graph_processing process=\"%f\" natural=\"%f\" />", _time,
            _time_nat);
 
+    /*
     for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
       int id = NI.GetId();
 
@@ -956,6 +1020,7 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
         TFltV fltv = vect.GetVal2();
       }
     }
+    */
 
   } else {
     SendResult(ProcNet, SelectedLen, SelectedBuff, rank, 0);
