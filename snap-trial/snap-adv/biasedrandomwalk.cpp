@@ -3,6 +3,7 @@
 #include "biasedrandomwalk.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <iterator>
 #include <mpi.h>
@@ -34,8 +35,8 @@ void PrintH(TIntIntVFltVPrH data) {
   } while (data.FNextKeyId(keyId));
 }
 
-THash<TInt, TBool> BFSStep(PWNet &InNet, THash<TInt, TBool> HM,
-                           THash<TInt, TBool> LastStep,
+THash<TInt, TBool> BFSStep(PWNet &InNet, const THash<TInt, TBool> &HM,
+                           const THash<TInt, TBool> &LastStep,
                            THash<TInt, TBool> &Selected,
                            THash<TPair<TInt, TInt>, TFlt> &Edges,
                            int ToBeSelectedEdges, bool OnlyOut) {
@@ -103,9 +104,9 @@ THash<TInt, TBool> BFSStep(PWNet &InNet, THash<TInt, TBool> HM,
       }
     }
 
-    // if (Edges.Len() >= ToBeSelectedEdges) {
-    //   break;
-    // }
+    if (Edges.Len() >= ToBeSelectedEdges) {
+      break;
+    }
   }
   return ThisStep;
 }
@@ -398,9 +399,9 @@ void DistributeGraph(PWNet &InNet, int NumProcs,
   */
 
   int ToBeSelected = (NumNodes / (NumProcs)) + 1; // Por si van de menos
-  int ToBeSelectedEdges = (NumEdges / (NumNodes)) + 1;
-  printf("\nEdges: %d\nProcs: %d\nToBeSelectedEdges: %d\n", NumEdges, NumProcs,
-         ToBeSelectedEdges);
+  int ToBeSelectedEdges = (NumEdges / (NumProcs)) + 1;
+  printf("\nEdges: %d\nNodes: %d\nProcs: %d\nToBeSelectedEdges: %d\n", NumEdges,
+         NumNodes, NumProcs, ToBeSelectedEdges);
 
   // Create HM of all nodes
   THash<TInt, TBool> HM;
@@ -438,8 +439,8 @@ void DistributeGraph(PWNet &InNet, int NumProcs,
     // Only out edges until last iteration, when we'll get in and out ones
 
     while (Selected.Len() < ToBeSelected && !HM.Empty()) {
-      // Make sure that all nodes are being visited still
-      // while(Edges.Len() < ToBeSelectedEdges && !HM.Empty()){
+    //  Make sure that all nodes are being visited still
+    //while (Edges.Len() < ToBeSelectedEdges && !HM.Empty()) {
 
       LastStep = BFSStep(InNet, HM, LastStep, Selected, Edges,
                          ToBeSelectedEdges - Edges.Len(), true);
@@ -450,14 +451,14 @@ void DistributeGraph(PWNet &InNet, int NumProcs,
         int NewKey = HM.GetKey(HM.GetRndKeyId(rand));
         Selected.AddKey(NewKey);
         HM.DelKey(NewKey);
+        LastStep.AddKey(NewKey);
 
-        // Oof, evil gotos and continues
-        continue;
-      }
+      } else {
       for (THash<TInt, TBool>::TIter j = LastStep.BegI(); !j.IsEnd();
            j.Next()) {
         Selected.AddKey(j.GetKey());
         HM.DelKey(j.GetKey());
+      }
       }
     }
 
