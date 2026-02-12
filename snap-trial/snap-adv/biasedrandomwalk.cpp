@@ -48,7 +48,7 @@ THash<TInt, TBool> BFSStep(PWNet &InNet, THash<TInt, TBool> &HM,
   // them
   if (!OnlyOut) {
     // Copy of that one loop
-    for (THash<TInt, TBool>::TIter i = LastStep.BegI(); !i.IsEnd(); i.Next()) {
+    for (THash<TInt, TBool>::TIter i = Selected.BegI(); !i.IsEnd(); i.Next()) {
 
       TWNet::TNodeI CurrI = InNet->GetNI(i.GetKey());
 
@@ -105,6 +105,11 @@ THash<TInt, TBool> BFSStep(PWNet &InNet, THash<TInt, TBool> &HM,
 
         // printf("new nodes: %d\n", n);
       }
+
+    if (TotalEdges  >= ToBeSelectedEdges) {
+      break;
+    }
+
     }
 
     
@@ -454,7 +459,7 @@ void DistributeGraph(PWNet &InNet, int NumProcs,
     //  (((TotalEdges / 2) < ToBeSelectedEdges && Selected.Len() < ToBeSelected) && !HM.Empty()) 
     //  || (i == NumProcs-1 && !HM.Empty())
     //  ){
-    while ((TotalEdges < ToBeSelectedEdges && !HM.Empty()) || (i == NumProcs-1 && !HM.Empty())){
+    while ((TotalEdges / 2 < ToBeSelectedEdges && !HM.Empty()) || (i == NumProcs-1 && !HM.Empty())){
 
       LastStep = BFSStep(InNet, HM, LastStep, Selected, Edges,
                          ToBeSelectedEdges - Edges.Len(), ToBeSelected - Selected.Len(), TotalEdges, true);
