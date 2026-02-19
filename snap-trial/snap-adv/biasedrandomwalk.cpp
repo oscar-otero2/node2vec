@@ -322,11 +322,27 @@ PWNet RecvChunk(int *SelectedLen, int **SelectedBuff, double ParamP,
     ProcNet->AddEdge(node1, node2, WeightsBuff[i]);
   }
   // Return Selected in some incredible way
+  
+  clock_t begin = clock();
+    double begin_nat = omp_get_wtime();
+
+
 
   for (int i = 0; i < *SelectedLen; i++) {
     PreprocessNodeParallel(ProcNet, ParamP, ParamQ,
                            ProcNet->GetNI((*SelectedBuff)[i]));
   }
+
+    clock_t end = clock();
+    double end_nat = omp_get_wtime();
+
+    double _time = double(end - begin) / CLOCKS_PER_SEC;
+    double _time_nat = end_nat - begin_nat;
+
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  printf("<proc rank=\"%d\" process=\"%f\" natural=\"%f\" />\n", rank, _time, _time_nat);
+
 
   free(EdgesBuff);
   free(WeightsBuff);
