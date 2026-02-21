@@ -7,7 +7,7 @@
 void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
   const int& Dimensions, const int& WalkLen, const int& NumWalks,
   const int& WinSize, const int& Iter, const bool& Verbose,
-  const bool& OutputWalks, TVVec<TInt, int64>& WalksVV,
+  const bool& OutputWalks, const int& Blocks, TVVec<TInt, int64>& WalksVV,
   TIntFltVH& EmbeddingsHV) {
   // Preprocess transition probabilities
   // From biasedrandomwalk.cpp ->
@@ -26,7 +26,7 @@ void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
   printf("<preprocess_transition_probs>");
   
 
-  PreprocessTransitionProbs(InNet, ParamP, ParamQ, Verbose);
+  PreprocessTransitionProbs(InNet, ParamP, ParamQ, Blocks, Verbose);
 
     
   clock_t end = clock();
@@ -120,7 +120,7 @@ void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
     // Code for all other processes
   } else{
 
-  PreprocessTransitionProbs(InNet, ParamP, ParamQ, Verbose);
+  PreprocessTransitionProbs(InNet, ParamP, ParamQ, Blocks, Verbose);
 
   }
 }
@@ -134,6 +134,18 @@ void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
   to the inner workings of this algorithm.
 */
 
+void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
+  const int& Dimensions, const int& WalkLen, const int& NumWalks,
+  const int& WinSize, const int& Iter, const bool& Verbose,
+  const bool& OutputWalks, TVVec<TInt, int64>& WalksVV,
+  TIntFltVH& EmbeddingsHV) {
+  
+    int numprocs;
+    MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
+
+    node2vec(InNet, ParamP, ParamQ, Dimensions, WalkLen, NumWalks, WinSize,
+     Iter, Verbose, OutputWalks, numprocs, WalksVV, EmbeddingsHV);
+  }
 
 void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
   const int& Dimensions, const int& WalkLen, const int& NumWalks,
