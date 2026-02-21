@@ -11,6 +11,7 @@
 
 // Indicates the process wants to send its results and recv a new piece
 #define REQUEST 1
+#define DISMISS 2
 
 #define SENDING_BLOCK 10
 #define NO_MORE_BLOCKS 20
@@ -34,6 +35,7 @@ typedef struct _ProcStatus
 {
   int processingLen; // index == rank
   bool* processing;
+  bool* hasReceived;
 } ProcStatus;
 
 
@@ -122,9 +124,6 @@ bool SendToFirstFree(Storage* Stored, int Blocks, ProcStatus& Status){
   // Do not use rank 0!!
   for(int i = 1; i < Status.processingLen; i++){
     if(!Status.processing[i]){
-      printf("\nproc in first -> %d\n", i);
-      printf("\nrocessing len -> %d\n", Status.processingLen);
-      fflush(stdout);
       SendChunk(Stored[first], Status, i);
       return true;
     }
@@ -353,14 +352,11 @@ void SendChunk(Storage& Stored, ProcStatus& Status, int Proc) {
   // Send selected
   Stored.hasData = false;
   Status.processing[Proc] = true;
+  Status.hasReceived[Proc] = true;
 
-  printf("\n No more store and status in -> %d\n", Proc);
-  fflush(stdout);
   MPI_Send(&(Stored.selectedLen), 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
   MPI_Send(Stored.selected, Stored.selectedLen, MPI_INT, Proc, 0, MPI_COMM_WORLD);
 
-  printf("Selected sent\n");
-  fflush(stdout);
 
   // Send edges
   MPI_Send(&(Stored.edgesLen), 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
@@ -370,8 +366,6 @@ void SendChunk(Storage& Stored, ProcStatus& Status, int Proc) {
   MPI_Send(&(Stored.weightsLen), 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
   MPI_Send(Stored.weights, Stored.weightsLen, MPI_FLOAT, Proc, 0, MPI_COMM_WORLD);
 
-  printf("All rest sent\n");
-  fflush(stdout);
 
   free(Stored.selected);
   free(Stored.edges);
@@ -467,8 +461,6 @@ PWNet RecvChunk(int *SelectedLen, int **SelectedBuff, double ParamP,
 void SendResult(PWNet &ProcNet, int SelectedLen, int *SelectedBuff,
                 int SelfProc, int Proc) {
 
-  printf("\n proc -> %d\n", Proc);
-  fflush(stdout);
   MPI_Send(&SelfProc, 1, MPI_INT, Proc, REQUEST, MPI_COMM_WORLD);
   // int Lens[SelectedLen];
   // int* Lens = (int*) malloc(SelectedLen*sizeof(int));
@@ -496,15 +488,11 @@ int RecvResult(PWNet &InNet, ProcStatus& Status) {
   int Proc;
   MPI_Status status;
   MPI_Recv(&Proc, 1, MPI_INT, MPI_ANY_SOURCE, REQUEST, MPI_COMM_WORLD, &status);
-  printf("Recv from %d\n", Proc);
-  fflush(stdout);
   
   return RecvResult(InNet, Status, Proc);
 }
 int RecvResult(PWNet &InNet, ProcStatus& Status, int Proc) {
   
-  printf("\nMarked inactive -> %d\n", Proc);
-  fflush(stdout);
   Status.processing[Proc] = false;
 
   int SelectedLen;
@@ -648,6 +636,7 @@ void DistributeGraph(PWNet &InNet, int NumProcs, int Blocks, Storage* Stored, Pr
         BFSStep(InNet, HM, Selected, Selected, Edges, 0, 0, TotalEdges, false);
 
     printf("After addit (%d edges)\n", Edges.Len());
+    fflush(stdout);
 
     
     // First of all, if any process is available just send data to it and prepare next chunk
@@ -672,12 +661,10 @@ void DistributeGraph(PWNet &InNet, int NumProcs, int Blocks, Storage* Stored, Pr
         
         // Receive results of the process and send new data to it
         // This automatically gets data into the net
-        int Proc = RecvResult(InNet, Status, Proc);
+        int Proc = RecvResult(InNet, Status);
 
 
         int Response = SENDING_BLOCK;
-        printf("\n proc -> %d\n", Proc);
-        fflush(stdout);
         MPI_Send(&Response, 1, MPI_INT, Proc, REQUEST, MPI_COMM_WORLD);
 
         // Send remaining chunk
@@ -971,8 +958,10 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     ProcStatus Status;
     Status.processingLen = numprocs;
     Status.processing = (bool*)malloc(sizeof(bool)*numprocs);
+    Status.hasReceived = (bool*)malloc(sizeof(bool)*numprocs);
     for(int i = 0; i < numprocs; i++){
       Status.processing[i] = false;
+      Status.hasReceived[i] = false;
     }
 
     clock_t begin = clock();
@@ -991,15 +980,9 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     // Start Recv for all remaining Procs
     while(DataLeft(Stored, Blocks)){
       
-      printf("Recv first (data left)\n");
-      fflush(stdout);
       int Proc = RecvResult(InNet, Status);
-      printf("Could recv first (data left)\n");
-      fflush(stdout);
       
       int Response = SENDING_BLOCK;
-      printf("\n proc -> %d\n", Proc);
-      fflush(stdout);
       MPI_Send(&Response, 1, MPI_INT, Proc, REQUEST, MPI_COMM_WORLD);
 
       // Send remaining chunk
@@ -1007,18 +990,20 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
       SendChunk(Stored[first], Status, Proc);
 
     }
+    // Dismiss processes
+    for(int i = 1; i < numprocs; i++){
+      if(!Status.hasReceived[i]){
+        int Dismiss = DISMISS;
+        MPI_Send(&Dismiss, 1, MPI_INT, i, REQUEST, MPI_COMM_WORLD);
+      }
+    }
+
     // Until all procs have sent
     while(!ProcsFinished(Status)){
 
-      printf("Recv first (NO data left)\n");
-      fflush(stdout);
       int Proc = RecvResult(InNet, Status);
-      printf("Could recv first (NO data left)\n");
-      fflush(stdout);
       
       int Response = NO_MORE_BLOCKS;
-      printf("\n proc -> %d\n", Proc);
-      fflush(stdout);
       MPI_Send(&Response, 1, MPI_INT, Proc, REQUEST, MPI_COMM_WORLD);
     }
 
@@ -1027,20 +1012,36 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     // TODO, VERY BIG TODO
     // THIS WILL PROBABLY GET STUCK AS IT HAS TO BE SENT AT LEAST ONE CHUNK
 
-    // Already Processed
-    ProcNet = RecvChunk(&SelectedLen, &SelectedBuff, ParamP, ParamQ, 0);
-    
-    // Send result, which also send the request first
-    SendResult(ProcNet, SelectedLen, SelectedBuff, rank, 0);
+    // Be careful and wait for a dismiss too
+    // Probe message on request -> Dismiss
+    // Probe message on tag 0 -> SendChunk
+    int dismiss = 0;
+    int recv = 0;
 
-    // Recv request's result
-    int isSending;
-    MPI_Recv(&isSending, 1, MPI_INT, 0, REQUEST, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+    while(!dismiss && !recv){
+      // Request tag
+      MPI_Iprobe(0, REQUEST, MPI_COMM_WORLD, &dismiss, MPI_STATUS_IGNORE);
     
-    while(isSending == SENDING_BLOCK){
+      // Message tag
+      MPI_Iprobe(0, 0, MPI_COMM_WORLD, &recv, MPI_STATUS_IGNORE);
+    }
+    
+    if(recv){
       ProcNet = RecvChunk(&SelectedLen, &SelectedBuff, ParamP, ParamQ, 0);
+    
+      // Send result, which also send the request first
       SendResult(ProcNet, SelectedLen, SelectedBuff, rank, 0);
+
+      // Recv request's result
+      int isSending;
       MPI_Recv(&isSending, 1, MPI_INT, 0, REQUEST, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    
+      while(isSending == SENDING_BLOCK){
+        ProcNet = RecvChunk(&SelectedLen, &SelectedBuff, ParamP, ParamQ, 0);
+        SendResult(ProcNet, SelectedLen, SelectedBuff, rank, 0);
+        MPI_Recv(&isSending, 1, MPI_INT, 0, REQUEST, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+      }
     }
 
     // We shall rejoin data once again here
