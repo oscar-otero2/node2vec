@@ -309,7 +309,8 @@ void recvHM(TIntIntVFltVPrH &hash, int Proc) {
     // Recv data
     MPI_Recv(&StreamDatLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD,
              MPI_STATUS_IGNORE);
-    DatBuf = (char *)malloc(StreamDatLen);
+    //DatBuf = (char *)malloc(StreamDatLen);
+    DatBuf = new char[StreamDatLen];
     MPI_Recv(DatBuf, StreamDatLen, MPI_BYTE, Proc, 0, MPI_COMM_WORLD,
              MPI_STATUS_IGNORE);
 
@@ -321,7 +322,8 @@ void recvHM(TIntIntVFltVPrH &hash, int Proc) {
     // Recv key
     MPI_Recv(&StreamKeyLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD,
              MPI_STATUS_IGNORE);
-    KeyBuf = (char *)malloc(StreamKeyLen);
+    //KeyBuf = (char *)malloc(StreamKeyLen);
+    KeyBuf = new char[StreamKeyLen];
     MPI_Recv(KeyBuf, StreamKeyLen, MPI_BYTE, Proc, 0, MPI_COMM_WORLD,
              MPI_STATUS_IGNORE);
 
@@ -372,20 +374,24 @@ void SendChunk(Storage& Stored, ProcStatus& Status, int Proc) {
   free(Stored.weights);
 }
 
+
+void SendResult(PWNet &ProcNet, int SelectedLen, int *SelectedBuff,
+                int SelfProc, int Proc);
 // Shall join these to work every way?
 // Mirror function to SendChunk. Will receive chunks of graph. Probs returns a
 // PWNet or TWNet
 // TODO a little bit of memory management
-PWNet RecvChunk(int *SelectedLen, int **SelectedBuff, double ParamP,
-                double ParamQ, int Proc) { // Proc is rank 0 in this case
+void RecvChunk(double ParamP,
+                double ParamQ, int SelfProc, int Proc) { // Proc is rank 0 in this case
 
+  int SelectedLen;
   // Recv SelectedLen
-  MPI_Recv(SelectedLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+  MPI_Recv(&SelectedLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
   // Create all selected's buffer
 
-  *SelectedBuff = (int *)malloc(*SelectedLen * sizeof(int));
-  MPI_Recv(*SelectedBuff, *SelectedLen, MPI_INT, Proc, 0, MPI_COMM_WORLD,
+  int *SelectedBuff = (int *)malloc(SelectedLen * sizeof(int));
+  MPI_Recv(SelectedBuff, SelectedLen, MPI_INT, Proc, 0, MPI_COMM_WORLD,
            MPI_STATUS_IGNORE);
 
   // Recv EdgesLen
@@ -436,9 +442,9 @@ PWNet RecvChunk(int *SelectedLen, int **SelectedBuff, double ParamP,
 
 
 
-  for (int i = 0; i < *SelectedLen; i++) {
+  for (int i = 0; i < SelectedLen; i++) {
     PreprocessNodeParallel(ProcNet, ParamP, ParamQ,
-                           ProcNet->GetNI((*SelectedBuff)[i]));
+                           ProcNet->GetNI((SelectedBuff)[i]));
   }
 
     clock_t end = clock();
@@ -455,7 +461,8 @@ PWNet RecvChunk(int *SelectedLen, int **SelectedBuff, double ParamP,
   free(EdgesBuff);
   free(WeightsBuff);
 
-  return ProcNet;
+  SendResult(ProcNet, SelectedLen, SelectedBuff, SelfProc, 0);
+  free(SelectedBuff);
 }
 
 void SendResult(PWNet &ProcNet, int SelectedLen, int *SelectedBuff,
@@ -464,7 +471,6 @@ void SendResult(PWNet &ProcNet, int SelectedLen, int *SelectedBuff,
   MPI_Send(&SelfProc, 1, MPI_INT, Proc, REQUEST, MPI_COMM_WORLD);
   // int Lens[SelectedLen];
   // int* Lens = (int*) malloc(SelectedLen*sizeof(int));
-  char **SendBuff = (char **)malloc(SelectedLen * sizeof(char *));
 
   // std::vector<std::vector<char>> buffers(SelectedLen);
   std::vector<int> Lens(SelectedLen);
@@ -478,8 +484,6 @@ void SendResult(PWNet &ProcNet, int SelectedLen, int *SelectedBuff,
     sendHM(hash, Proc);
   }
 
-  free(SendBuff);
-  free(SelectedBuff);
 }
 
 // DO NOT USE
@@ -1028,18 +1032,21 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     }
     
     if(recv){
-      ProcNet = RecvChunk(&SelectedLen, &SelectedBuff, ParamP, ParamQ, 0);
+      //Already sends results
+      RecvChunk(ParamP, ParamQ, rank, 0);
+
     
       // Send result, which also send the request first
-      SendResult(ProcNet, SelectedLen, SelectedBuff, rank, 0);
+      //SendResult(ProcNet, SelectedLen, SelectedBuff, rank, 0);
+      //free(SelectedBuff);
 
       // Recv request's result
       int isSending;
       MPI_Recv(&isSending, 1, MPI_INT, 0, REQUEST, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     
       while(isSending == SENDING_BLOCK){
-        ProcNet = RecvChunk(&SelectedLen, &SelectedBuff, ParamP, ParamQ, 0);
-        SendResult(ProcNet, SelectedLen, SelectedBuff, rank, 0);
+        // Already sends results
+        RecvChunk(ParamP, ParamQ, rank, 0);
         MPI_Recv(&isSending, 1, MPI_INT, 0, REQUEST, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
       }
     }
