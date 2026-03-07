@@ -2,6 +2,7 @@
 #include "Snap.h"
 #include "biasedrandomwalk.h"
 
+#include <cstddef>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -22,7 +23,13 @@
 #define DATA_STATUS_SENDING 102
 #define DATA_STATUS_SENT 103
 
+#define RESULT_STATUS_NOT_READY 200
+#define RESULT_STATUS_READY 201
+
 #define NEXT_DATA_NONE 0
+#define NEXT_RESULT_NONE 0
+
+MPI_Aint globalStorageDisp;
 
 
 // La estructura de la memoria de todo esto debería ser -> 
@@ -53,6 +60,23 @@ typedef struct _HMStorage
 
 } HMStorage;
 
+typedef struct _HMProcStorage
+{
+  MPI_Aint disp; // Disp of next HM
+  int totalLen;
+  int nodeId;
+  int entries;
+
+  // Tha same as HMStorage
+} HMProcStorage;
+
+typedef struct _InitNode
+{
+  MPI_Aint status;
+  MPI_Aint disp; // This is the address of the first HMStorage
+
+} InitNode;
+
 typedef struct _WinStorage
 {
   MPI_Aint totalSize;
@@ -70,6 +94,9 @@ typedef struct _WinStorage
 } WinStorage;
 
 void putSelectedResults(const PWNet& ProcNet, MPI_Win storageWindow, MPI_Win resultWindow, MPI_Aint disp, MPI_Aint dispResult, int selectedLen, int* selectedBuff);
+void putSelectedResultsList(const PWNet& ProcNet, InitNode& initNode, MPI_Win storageWindow, MPI_Win procResultWindow, int selectedLen, int* selectedBuff);
+void appendSelectedResults(const PWNet& ProcNet, MPI_Win procResultWindow, MPI_Aint* toModifyDisp, int selectedLen, int* selectedBuff);
+HMProcStorage* allocHMProcStorage(const TIntIntVFltVPrH& hash, const int& nodeId);
 void PreprocessNodeParallel(PWNet &InNet, const double &ParamP, const double &ParamQ, TWNet::TNodeI NI);
 
 bool isDataConsumed(WinStorage** winStorages, int blocks){
@@ -222,9 +249,7 @@ WinStorage* storeWinStorage(const THash<TInt, TBool>& Selected, const THash<TPai
   return storage;
 }
 
-
-// Some way of returning the actual procNet here please.
-int getFirstAvailable(MPI_Win storageWindow, MPI_Win resultWindow, MPI_Aint disp, MPI_Aint dispResult, const double& ParamP, const double& ParamQ, int blocks){
+int getFirstAvailableRank0(PWNet& InNet, MPI_Win storageWindow, MPI_Win resultWindow, MPI_Win procResultWindow, MPI_Aint disp, MPI_Aint dispResult, InitNode& initNode, const double& ParamP, const double& ParamQ, int blocks){
 MPI_Aint vals[3]; // [0] total size, [1] next data, [2] status
 int currentWindow = 0;
 bool moreWindows = true;
@@ -249,12 +274,12 @@ MPI_Win_flush(0, storageWindow);
             storageWindow
             );
     MPI_Win_flush(0, storageWindow);
-    printf("\nBlock %d, From %p Gotten:\nvals[0]size: %ld\nvals[1]nextData: %p\nvals[2]status %ld\n\n", currentWindow, disp, vals[0], vals[1], vals[2]);
+    //printf("\nBlock %d, From %p Gotten:\nvals[0]size: %ld\nvals[1]nextData: %p\nvals[2]status %ld\n\n", currentWindow, disp, vals[0], vals[1], vals[2]);
     fflush(stdout);
   
     if(vals[2] == DATA_STATUS_NOT_USED){
       storage = (WinStorage*) malloc(vals[0]);
-    printf("\ngetFirst 2 Get where storage: %p\nvals0: %ld\ndisp: %p\n\n", storage, vals[0], disp);
+    //printf("\ngetFirst 2 Get where storage: %p\nvals0: %ld\ndisp: %p\n\n", storage, vals[0], disp);
     fflush(stdout);
       // TODO: Fix this Get
       MPI_Get(storage,
@@ -266,7 +291,7 @@ MPI_Win_flush(0, storageWindow);
               MPI_BYTE,
               storageWindow);
     MPI_Win_flush(0, storageWindow);
-    printf("getFirst 3 Put\n");
+    //printf("getFirst 3 Put\n");
     fflush(stdout);
       MPI_Aint status = DATA_STATUS_USING;
       MPI_Aint statusByteOffset;
@@ -296,7 +321,127 @@ MPI_Win_flush(0, storageWindow);
         }
         break;
       } else {
-        printf("Reassing disp to: %p\n", vals[1]);
+        //printf("Reassing disp to: %p\n", vals[1]);
+        disp = vals[1];
+        currentWindow++;
+      }
+    }
+
+  MPI_Win_flush(0, storageWindow);
+  MPI_Win_unlock(0, storageWindow);
+  MPI_Win_sync(storageWindow);
+  
+  if(storage == NULL) return 1; // This means we should try again No need to re-create the procNet
+  
+  int edgesLen = storage->edgesLen;
+  int weightsLen = storage->weigthsLen;
+  int selectedLen = storage->selectedLen;
+
+  int* edges = (int*)(storage+1);
+  float* weights = (float*)(edges + edgesLen);
+  int* selected = (int*)(weights + weightsLen);
+  
+  
+  clock_t begin = clock();
+    double begin_nat = omp_get_wtime();
+
+  for (int i = 0; i < selectedLen; i++) {
+    PreprocessNodeParallel(InNet, ParamP, ParamQ,
+                           InNet->GetNI((selected)[i]));
+  }
+
+    clock_t end = clock();
+    double end_nat = omp_get_wtime();
+
+    double _time = double(end - begin) / CLOCKS_PER_SEC;
+    double _time_nat = end_nat - begin_nat;
+
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  printf("<proc rank=\"%d\" process=\"%f\" natural=\"%f\" />\n", rank, _time, _time_nat);
+
+  if(storage != NULL){
+    free(storage);
+  }
+  return 0;
+}
+
+// Some way of returning the actual procNet here please.
+int getFirstAvailable(MPI_Win storageWindow, MPI_Win resultWindow, MPI_Win procResultWindow, MPI_Aint disp, MPI_Aint dispResult, InitNode& initNode, const double& ParamP, const double& ParamQ, int blocks){
+MPI_Aint vals[3]; // [0] total size, [1] next data, [2] status
+int currentWindow = 0;
+bool moreWindows = true;
+
+WinStorage* storage = NULL;
+
+MPI_Win_lock(MPI_LOCK_EXCLUSIVE, 0, 0, storageWindow);
+MPI_Win_flush(0, storageWindow);
+
+  while(moreWindows){
+    if(disp == NEXT_DATA_NONE){
+      if(storage != NULL) free(storage);
+      break;
+    }
+    MPI_Get(vals,
+            3,
+            MPI_AINT,
+            0,
+            disp,
+            3,
+            MPI_AINT,
+            storageWindow
+            );
+    MPI_Win_flush(0, storageWindow);
+    //printf("\nBlock %d, From %p Gotten:\nvals[0]size: %ld\nvals[1]nextData: %p\nvals[2]status %ld\n\n", currentWindow, disp, vals[0], vals[1], vals[2]);
+    fflush(stdout);
+  
+    if(vals[2] == DATA_STATUS_NOT_USED){
+      storage = (WinStorage*) malloc(vals[0]);
+    //printf("\ngetFirst 2 Get where storage: %p\nvals0: %ld\ndisp: %p\n\n", storage, vals[0], disp);
+    fflush(stdout);
+      // TODO: Fix this Get
+      MPI_Get(storage,
+              vals[0],
+              MPI_BYTE,
+              0,
+              disp,
+              vals[0],
+              MPI_BYTE,
+              storageWindow);
+    MPI_Win_flush(0, storageWindow);
+    //printf("getFirst 3 Put\n");
+    fflush(stdout);
+      MPI_Aint status = DATA_STATUS_USING;
+      MPI_Aint statusByteOffset;
+      statusByteOffset = offsetof(WinStorage, dataStatus);
+      MPI_Put(
+        &status,
+        1,
+        MPI_AINT,
+        0,
+        disp+statusByteOffset, // This should edit the status only
+        1,
+        MPI_AINT,
+        storageWindow
+      );
+      MPI_Win_flush(0, storageWindow);
+      break;
+    } else if(vals[1] == NEXT_DATA_NONE || vals[1] == NULL){
+      int rank;
+      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+      printf("Rank %d. No data next, curr: %d, blocks-1: %d\n", rank, currentWindow, blocks-1);
+      fflush(stdout);
+      if(currentWindow == blocks-1){
+        if(storage != NULL){
+          free(storage);
+        }
+        // Unlock before returning
+        MPI_Win_unlock(0, storageWindow);
+        return -1; // Processing should end now
+        }
+        break;
+      } else {
+        //printf("Reassing disp to: %p\n", vals[1]);
         disp = vals[1];
         currentWindow++;
       }
@@ -355,11 +500,124 @@ MPI_Win_flush(0, storageWindow);
 
   putSelectedResults(ProcNet, storageWindow, resultWindow, disp, dispResult, selectedLen, selected);
 
+  printf("Put again\n");
+  fflush(stdout);
+  //putSelectedResultsList(ProcNet, initNode, storageWindow, procResultWindow, selectedLen, selected);
+
   if(storage != NULL){
     free(storage);
   }
   return 0;
 }
+
+void putSelectedResultsList(const PWNet& ProcNet, InitNode& initNode, MPI_Win storageWindow, MPI_Win procResultWindow, int selectedLen, int* selectedBuff){
+  /*
+    The list will be: InitNode
+
+    The nodes will be of type HMProcStorage (it has now a disp on the first memory MPI_Aint)
+  */
+  printf("Agrs:\n");
+  printf("initNode: %ld, %ld\n", initNode.disp, initNode.status);
+  fflush(stdout);
+
+  MPI_Aint* disp = &(initNode.disp);
+  if(*disp == NEXT_RESULT_NONE || *disp == NULL){
+    // Alloc and place disp
+    printf("First append\n");
+    fflush(stdout);
+    appendSelectedResults(ProcNet, procResultWindow, disp, selectedLen, selectedBuff);
+  } else{
+
+    while(*disp != NEXT_RESULT_NONE && *disp != NULL){
+      void* location = (void*)*disp;
+      HMProcStorage* block = (HMProcStorage*)location;
+      disp = &(block->disp);
+    }
+    // Gotten to last node. Append new node
+    printf("Subsequent append\n");
+    fflush(stdout);
+    appendSelectedResults(ProcNet, procResultWindow, disp, selectedLen, selectedBuff);
+  }
+
+}
+
+void appendSelectedResults(const PWNet& ProcNet, MPI_Win procResultWindow, MPI_Aint* toModifyDisp, int selectedLen, int* selectedBuff){
+  MPI_Aint* previousPtr = toModifyDisp;
+  for(int i = 0; i < selectedLen; i++){
+    int nodeId = selectedBuff[i];
+    TIntIntVFltVPrH hash = ProcNet->GetNDat(nodeId);
+
+    // Alloc space
+    printf("Alloc space\n");
+    fflush(stdout);
+    HMProcStorage* hmPointer = allocHMProcStorage(hash, nodeId);
+    MPI_Win_attach(procResultWindow, hmPointer, hmPointer->totalLen);
+    MPI_Aint disp;
+    MPI_Get_address(hmPointer, &disp);
+    *previousPtr = disp;
+    
+    hmPointer->disp = NEXT_RESULT_NONE;
+    previousPtr = &(hmPointer->disp);
+  }
+  
+}
+
+HMProcStorage* allocHMProcStorage(const TIntIntVFltVPrH& hash,  const int& nodeId){
+  size_t totalBufferSize = 0;
+  
+  // Add the disp size
+  totalBufferSize += sizeof(MPI_Aint);
+
+  // Header overhead per node (totalSize + nodeId + numEntries)
+  totalBufferSize += sizeof(TInt) * 3; 
+
+  for (TIntIntVFltVPrH::TIter it = hash.BegI(); it < hash.EndI(); it++) {
+    const TIntV& intVec = it.GetDat().Val1;
+    const TFltV& fltVec = it.GetDat().Val2;
+    totalBufferSize += sizeof(TInt);            // key
+    totalBufferSize += sizeof(TInt);            // TIntV length
+    totalBufferSize += sizeof(TInt) * intVec.Len();
+    totalBufferSize += sizeof(TInt);            // TFltV length
+    totalBufferSize += sizeof(TFlt) * fltVec.Len();
+  }
+
+
+  // --- PART 2: Serialize everything into one local buffer ---
+  char* bigBuffer = (char*)malloc(totalBufferSize);
+  char* ptr = bigBuffer;
+
+  int numEntries = hash.Len();
+
+  // Temporarily save position to write node-specific totalSize later
+  MPI_Aint* nextDispPtr = (MPI_Aint*)ptr; ptr += sizeof(MPI_Aint);
+  char* nodeSizePtr = ptr;
+  ptr += sizeof(TInt); // Skip totalSize for now
+  *((TInt*)ptr) = nodeId;     ptr += sizeof(TInt);
+  *((TInt*)ptr) = numEntries; ptr += sizeof(TInt);
+
+  char* entriesStart = ptr;
+  for (TIntIntVFltVPrH::TIter it = hash.BegI(); it < hash.EndI(); it++) {
+    int key = it.GetKey();
+    const TIntV& intVec = it.GetDat().Val1;
+    const TFltV& fltVec = it.GetDat().Val2;
+
+    *((TInt*)ptr) = key; ptr += sizeof(TInt);
+    
+    *((TInt*)ptr) = intVec.Len(); ptr += sizeof(TInt);
+    memcpy(ptr, intVec.BegI(), sizeof(TInt) * intVec.Len());
+    ptr += sizeof(TInt) * intVec.Len();
+
+    *((TInt*)ptr) = fltVec.Len(); ptr += sizeof(TInt);
+    memcpy(ptr, fltVec.BegI(), sizeof(TFlt) * fltVec.Len());
+    ptr += sizeof(TFlt) * fltVec.Len();
+  }
+
+  // After writing all entries for one node
+  // Write the actual size for this specific node block
+  *((TInt*)nodeSizePtr) = (TInt)(ptr - nodeSizePtr);
+  return (HMProcStorage* )bigBuffer;
+}
+
 
 /*
 void putSelectedResults(const PWNet& ProcNet, MPI_Win storageWindow, MPI_Win resultWindow, MPI_Aint disp, MPI_Aint dispResult, int selectedLen, int* selectedBuff) {
@@ -530,19 +788,19 @@ void putSelectedResults(const PWNet& ProcNet, MPI_Win storageWindow, MPI_Win res
 
   MPI_Aint currOffset;
   // Get current global displacement (stored at Rank 0 base address)
-  printf("First Get\n");
+  //printf("First Get\n");
   fflush(stdout);
   MPI_Get(&currOffset, 1, MPI_AINT, 0, dispResult, 1, MPI_AINT, resultWindow);
   MPI_Win_flush(0, resultWindow);
   
   // Calculate and update the next available offset
-  printf("First Put\n");
+  //printf("First Put\n");
   fflush(stdout);
   MPI_Aint nextOffset = currOffset + totalBufferSize;
   MPI_Put(&nextOffset, 1, MPI_AINT, 0, dispResult, 1, MPI_AINT, resultWindow);
   
   // Single write of all data to: Base Address + Reserved Offset
-  printf("Secont Put in:\naddress: %p\nsize: %p\n", dispResult + currOffset, totalBufferSize);
+  //printf("Secont Put in:\naddress: %p\nsize: %p\n", dispResult + currOffset, totalBufferSize);
   fflush(stdout);
   MPI_Put(bigBuffer, totalBufferSize, MPI_BYTE, 0, dispResult + currOffset, totalBufferSize, MPI_BYTE, resultWindow);
   
@@ -551,7 +809,7 @@ void putSelectedResults(const PWNet& ProcNet, MPI_Win storageWindow, MPI_Win res
   // --- PART 4: Update Block Status ---
   MPI_Win_lock(MPI_LOCK_SHARED, 0, 0, storageWindow);
   MPI_Aint status = DATA_STATUS_SENT;
-  printf("Third Put\n");
+  //printf("Third Put\n");
   fflush(stdout);
   MPI_Aint statusByteOffset = offsetof(WinStorage, dataStatus);
   MPI_Put(&status, 1, MPI_AINT, 0, disp + statusByteOffset, 1, MPI_AINT, storageWindow);
@@ -799,6 +1057,7 @@ void DistributeGraph(PWNet &InNet, int NumProcs, int Blocks,
     fflush(stdout);
     if(i == 0){ // On first one send the displs, later add it to previous block
       MPI_Bcast(&disp, 1, MPI_AINT, 0, MPI_COMM_WORLD);
+      globalStorageDisp = disp;
     } else {
       winStorages[i-1]->nextData = disp;
       MPI_Win_sync(storageWindow);
@@ -1078,6 +1337,25 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
   MPI_Win resultWindow;
   MPI_Win_create_dynamic(MPI_INFO_NULL, MPI_COMM_WORLD, &resultWindow);
   
+  // TODO: maybe there is a need for one window for process
+  MPI_Win procResultWindow;
+  MPI_Win_create_dynamic(MPI_INFO_NULL, MPI_COMM_WORLD, &procResultWindow);
+  
+  // Create the init nodes
+  MPI_Aint procResultDisp[numprocs];
+  InitNode initNode;
+  for(int i = 1; i < numprocs; i++){
+    if(rank == i){
+      initNode.disp = NEXT_RESULT_NONE;
+      initNode.status = RESULT_STATUS_NOT_READY;
+      MPI_Win_attach(procResultWindow, &initNode, sizeof(initNode));
+
+      MPI_Get_address(&initNode, &(procResultDisp[i]));
+      MPI_Win_sync(procResultWindow);
+    }
+    MPI_Bcast(&(procResultDisp[i]), 1, MPI_AINT, 0, MPI_COMM_WORLD);
+  }
+  
   // Share Blocks
   MPI_Bcast(&Blocks, 1, MPI_INT, 0, MPI_COMM_WORLD);
   
@@ -1124,9 +1402,39 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     double _time_nat = end_nat - begin_nat;
 
     printf("<distribution process=\"%f\" natural=\"%f\" />", _time, _time_nat);
+    
+    bool moreBlocks = true;
+              
+    while(moreBlocks){
+
+      printf("Before get first-> disp: %p, blocks: %d\n\n", globalStorageDisp, Blocks);
+      int result = getFirstAvailableRank0(InNet, storageWindow, resultWindow, procResultWindow, globalStorageDisp, dispResult, initNode, ParamP, ParamQ, Blocks);
+      
+      printf("Result: %d\n", result);
+      if(result == -1){
+        moreBlocks = false;
+        printf("GOT OUT\n");
+      } else if (result == 1){
+        usleep(5000);
+        // do nothing, should retry the operation please, but wait a moment;
+        // TODO: Please do something to wait here
+      } else {
+        // Everything went right so nothing to do
+        // Already put everything
+      }
+
+      
+
+    }
+    printf("GOT OUT\n");
+    fflush(stdout);
 
     // Start Recv for all remaining Procs
+    /*
     while(!isDataConsumed(winStorages, Blocks)){
+      printf("Stuck\n");
+      fflush(stdout);
+
       
       MPI_Win_sync(resultWindow);
       MPI_Win_sync(storageWindow);
@@ -1134,6 +1442,7 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
       usleep(500000);
 
     }
+    */
     printf("GOT HERE TOO\n");
     fflush(stdout);
     // Dismiss processes
@@ -1155,42 +1464,6 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     ptr = base + sizeof(MPI_Aint);
 
     // Loop only up to the data that was actually written
-    /*
-    while(ptr - base < finalOffset){
-
-    printf("read -> %p\n", ptr-base);
-    fflush(stdout);
-      
-      TIntIntVFltVPrH hash;
-      // Headers (?)
-      int totalSize = *((TInt*)ptr); ptr += sizeof(TInt);
-      int nodeId = *((TInt*)ptr); ptr += sizeof(TInt);
-      int numEntries = *((TInt*)ptr); ptr += sizeof(TInt);
-
-      // numEntries is the amount of entries of this hm
-      for(int i = 0; i < numEntries; i++){
-        int key = *((TInt*)ptr); ptr += sizeof(TInt);
-      
-        int intVLen = *((TInt*)ptr); ptr += sizeof(TInt);
-        TIntV intV(intVLen);
-        for(int j = 0; j < intVLen; j++){
-          // Read data and write it to vector
-          intV[j] = (*(TInt*)ptr);
-          ptr += sizeof(TInt);
-        }
-          // TODO TODO TODO
-        int fltVLen = *((TInt*)ptr); ptr += sizeof(TInt);
-        TFltV fltV(fltVLen);
-        for(int j = 0; j < fltVLen; j++){
-          // Read data and write it to vector
-          fltV[j] = (*(TFlt*)ptr);
-          ptr += sizeof(TFlt);
-        }
-        hash.AddDat(key, TPair<TIntV, TFltV>(intV, fltV));
-      }
-        
-    }
-    */
     
     // Loop up to the data that was actually written
 while(ptr - base < finalOffset) {
@@ -1262,13 +1535,13 @@ while(ptr - base < finalOffset) {
     while(moreBlocks){
 
       printf("Before get first-> disp: %p, blocks: %d\n\n", disp, Blocks);
-      int result = getFirstAvailable(storageWindow, resultWindow, disp, dispResult, ParamP, ParamQ, Blocks);
+      int result = getFirstAvailable(storageWindow, resultWindow, procResultWindow, disp, dispResult, initNode, ParamP, ParamQ, Blocks);
       
       if(result == -1){
         moreBlocks = false;
         printf("GOT OUT\n");
       } else if (result == 1){
-        usleep(500000);
+        usleep(5000);
         // do nothing, should retry the operation please, but wait a moment;
         // TODO: Please do something to wait here
       } else {
