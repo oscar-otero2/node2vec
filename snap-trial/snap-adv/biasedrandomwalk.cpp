@@ -10,6 +10,7 @@
 #include <time.h>
 #include <mpi.h>
 #include <unistd.h>
+#include <vector>
 
 // Indicates the process wants to send its results and recv a new piece
 #define REQUEST 1
@@ -28,6 +29,8 @@
 
 #define NEXT_DATA_NONE 0
 #define NEXT_RESULT_NONE 0
+
+#define MAX_BLOCKS 64
 
 MPI_Aint globalStorageDisp;
 
@@ -103,39 +106,6 @@ bool isDataConsumed(WinStorage** winStorages, int blocks){
   return winStorages[blocks-1]->dataStatus == DATA_STATUS_SENT;
 }
 
-/*
-TSize initResultStorage(const PWNet& InNet, HMStorage** results){
-  TSize totalMem = sizeof(MPI_Aint); // Size req for the shared displs
-  for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
-    TIntIntVFltVPrH hash = InNet->GetNDat(NI.GetId());
-    for (THashKeyDatI<TInt, TIntVFltVPr> i = hash.BegI(); !i.IsEnd(); i++) {
-      // Every entry has size =>
-      // key (TINT)
-      // dat (size (TInt) + size*(TInt) + size(TInt) + size*(TFlt))
-       
-      // This is the key
-      
-      // Base size with total-len and nodeId
-      totalMem += sizeof(HMStorage);
-      
-
-      TIntVFltVPr dat = i.GetDat();
-      TIntV intV = dat.GetVal1();
-      TFltV intF = dat.GetVal2();
-
-      // Size of the IntV and the IntV values
-      totalMem += sizeof(TInt) + intV.Len()*sizeof(TInt);
-      
-      // Size of the FltV and the TFlt values
-      totalMem += sizeof(TInt) + intF.Len()*sizeof(TFlt);
-      
-    }
-  }
-
-  *results = (HMStorage*)malloc(totalMem);
-  return totalMem;
-}
-*/
 
 TSize initResultStorage(const PWNet& InNet, HMStorage** results){
   // Start with 8 bytes for the global offset (MPI_Aint)
@@ -159,41 +129,6 @@ for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
   return totalMem;
 }
 
-/*
-TSize initResultStorage(const PWNet& InNet, int selectedLen, int* selectedBuff, HMStorage* results){
-  TSize totalMem = 0;
-  for (int i = 0; i < selectedLen; i++) {
-    
-    TIntIntVFltVPrH hash = InNet->GetNDat(selectedBuff[i]);
-    totalMem += sizeof(HMStorage);
-    for (THashKeyDatI<TInt, TIntVFltVPr> i = hash.BegI(); !i.IsEnd(); i++) {
-      // Every entry has size =>
-      // key (TINT)
-      // dat (size (TInt) + size*(TInt) + size(TInt) + size*(TFlt))
-       
-      
-      // Base size with total-len and nodeId
-      
-      // This is the key
-      totalMem += sizeof(TInt);
-
-      TIntVFltVPr dat = i.GetDat();
-      TIntV intV = dat.GetVal1();
-      TFltV intF = dat.GetVal2();
-
-      // Size of the IntV and the IntV values
-      totalMem += sizeof(TInt) + intV.Len()*sizeof(TInt);
-      
-      // Size of the FltV and the TFlt values
-      totalMem += sizeof(TInt) + intF.Len()*sizeof(TFlt);
-      
-    }
-  }
-
-  results = (HMStorage*)malloc(totalMem);
-  return totalMem;
-}
-*/
 
 WinStorage* initWinStorage(int edgesLen, int weightsLen, int selectedLen){
   
@@ -367,7 +302,8 @@ MPI_Win_flush(0, storageWindow);
 }
 
 // Some way of returning the actual procNet here please.
-int getFirstAvailable(MPI_Win storageWindow, MPI_Win resultWindow, MPI_Win procResultWindow, MPI_Aint disp, MPI_Aint dispResult, InitNode& initNode, const double& ParamP, const double& ParamQ, int blocks){
+// ProcSelectedBuff -> ref to array of arrays (*selected[][])
+int getFirstAvailable(PWNet& ProcNet, MPI_Win storageWindow, MPI_Win resultWindow, MPI_Win procResultWindow, MPI_Aint disp, MPI_Aint dispResult, InitNode& initNode, const double& ParamP, const double& ParamQ, int blocks, int* ProcSelectedLen, int** ProcSelectedBuff, int index){
 MPI_Aint vals[3]; // [0] total size, [1] next data, [2] status
 int currentWindow = 0;
 bool moreWindows = true;
@@ -454,13 +390,24 @@ MPI_Win_flush(0, storageWindow);
   
   int edgesLen = storage->edgesLen;
   int weightsLen = storage->weigthsLen;
+  printf("Danger\n");
+  fflush(stdout);
+  // Existing variable
   int selectedLen = storage->selectedLen;
+  // TODO: IS THIS BULLSHIT?
+  ProcSelectedLen[index] = selectedLen;
+
 
   int* edges = (int*)(storage+1);
   float* weights = (float*)(edges + edgesLen);
   int* selected = (int*)(weights + weightsLen);
+  // TODO: I'm dumb mempcy does not alloc
+  ProcSelectedBuff[index] = (int*)malloc(sizeof(int) * selectedLen);
+  memcpy(ProcSelectedBuff[index], selected, selectedLen * sizeof(int));
   
-  PWNet ProcNet = PWNet::New();
+  printf("Danger done\n");
+  fflush(stdout);
+  //PWNet ProcNet = PWNet::New();
 
   for (int i = 0; i <  weightsLen; i++) {
     int node1, node2;
@@ -474,7 +421,10 @@ MPI_Win_flush(0, storageWindow);
       ProcNet->AddNode(node2);
     }
 
-    ProcNet->AddEdge(node1, node2, weights[i]);
+    // We are modifying the preexisting net
+    if (!ProcNet->IsEdge(node1, node2)){
+      ProcNet->AddEdge(node1, node2, weights[i]);
+    }
   }
   // Return Selected in some incredible way
   
@@ -498,10 +448,13 @@ MPI_Win_flush(0, storageWindow);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   printf("<proc rank=\"%d\" process=\"%f\" natural=\"%f\" />\n", rank, _time, _time_nat);
 
+  // This should be done at last only
+  /*
   putSelectedResults(ProcNet, storageWindow, resultWindow, disp, dispResult, selectedLen, selected);
 
   printf("Put again\n");
   fflush(stdout);
+  */
   //putSelectedResultsList(ProcNet, initNode, storageWindow, procResultWindow, selectedLen, selected);
 
   if(storage != NULL){
@@ -618,110 +571,6 @@ HMProcStorage* allocHMProcStorage(const TIntIntVFltVPrH& hash,  const int& nodeI
   return (HMProcStorage* )bigBuffer;
 }
 
-
-/*
-void putSelectedResults(const PWNet& ProcNet, MPI_Win storageWindow, MPI_Win resultWindow, MPI_Aint disp, MPI_Aint dispResult, int selectedLen, int* selectedBuff) {
-
-  for (int i = 0; i < selectedLen; ++i) {
-
-    int nodeId = selectedBuff[i];
-    TIntIntVFltVPrH hash = ProcNet->GetNDat(nodeId);
-
-    // First compute required size
-    int totalSize = sizeof(TInt) * 3; 
-    // totalLen + nodeId + numEntries
-
-    int numEntries = hash.Len();
-
-    for (TIntIntVFltVPrH::TIter it = hash.BegI(); it < hash.EndI(); it++) {
-      const TIntV& intVec = it.GetDat().Val1;
-      const TFltV& fltVec = it.GetDat().Val2;
-
-      totalSize += sizeof(TInt); // key
-      totalSize += sizeof(TInt); // TIntV length
-      totalSize += sizeof(TInt) * intVec.Len();
-      totalSize += sizeof(TInt); // TFltV length
-      totalSize += sizeof(TFlt) * fltVec.Len();
-    }
-
-    // Allocate contiguous storage
-    char* buffer = (char*) malloc(totalSize);
-    char* ptr = buffer;
-
-    // Write header
-    *((TInt*)ptr) = totalSize; ptr += sizeof(TInt);
-    *((TInt*)ptr) = nodeId;    ptr += sizeof(TInt);
-    *((TInt*)ptr) = numEntries; ptr += sizeof(TInt);
-
-    // Write entries
-    for (TIntIntVFltVPrH::TIter it = hash.BegI(); it < hash.EndI(); it++) {
-
-      int key = it.GetKey();
-      const TIntV& intVec = it.GetDat().Val1;
-      const TFltV& fltVec = it.GetDat().Val2;
-
-      // key
-      *((TInt*)ptr) = key;
-      ptr += sizeof(TInt);
-
-      // TIntV
-      *((TInt*)ptr) = intVec.Len();
-      ptr += sizeof(TInt);
-      memcpy(ptr, intVec.BegI(), sizeof(TInt) * intVec.Len());
-      ptr += sizeof(TInt) * intVec.Len();
-
-      // TFltV
-      *((TInt*)ptr) = fltVec.Len();
-      ptr += sizeof(TInt);
-      memcpy(ptr, fltVec.BegI(), sizeof(TFlt) * fltVec.Len());
-      ptr += sizeof(TFlt) * fltVec.Len();
-    }
-
-         
-    printf("Hey\n");
-    fflush(stdout);
-    // TODO: Fix a crash here upon second put
-    MPI_Win_lock(MPI_LOCK_EXCLUSIVE, 0, 0, resultWindow);
-
-    MPI_Aint currOffset;
-    // 1. Get the current RELATIVE offset from the start of the buffer
-    MPI_Get(&currOffset, 1, MPI_AINT, 0, dispResult, 1, MPI_AINT, resultWindow);
-    MPI_Win_flush(0, resultWindow);
-    
-    // 2. Calculate the next offset for the next person
-    MPI_Aint nextOffset = currOffset + totalSize;
-    MPI_Put(&nextOffset, 1, MPI_AINT, 0, dispResult, 1, MPI_AINT, resultWindow);
-    
-    // 3. Put the data at: Base Address + Relative Offset
-    // This is now: 0x7000 + 8 (Correct!) instead of 0x7000 + 0x7000 (Crash!)
-    MPI_Put(buffer, totalSize, MPI_BYTE, 0, dispResult + currOffset, totalSize, MPI_BYTE, resultWindow);
-    
-    MPI_Win_unlock(0, resultWindow);
-
-    MPI_Win_lock(MPI_LOCK_SHARED, 0, 0, storageWindow);
-
-    MPI_Aint status = DATA_STATUS_SENT;
-    MPI_Put(
-      &status,
-      1,
-      MPI_AINT,
-      0,
-      disp+2,
-      1,
-      MPI_AINT,
-      storageWindow
-    );
-
-
-    MPI_Win_unlock(0, storageWindow);
-
-    printf("Hey\n");
-    fflush(stdout);
-
-    free(buffer);
-  }
-}
-*/
 
 void putSelectedResults(const PWNet& ProcNet, MPI_Win storageWindow, MPI_Win resultWindow, MPI_Aint disp, MPI_Aint dispResult, int selectedLen, int* selectedBuff) {
   // --- PART 1: Calculate Total Required Size for ALL nodes ---
@@ -848,6 +697,153 @@ void PrintH(TIntIntVFltVPrH data) {
     for (int i = 0; i < vect1.Len() && i < vect2.Len(); i++)
       printf("%d:\t(%d, %f)\n", i, vect1[i], vect2[i]);
   } while (data.FNextKeyId(keyId));
+}
+
+void sendHM(TIntIntVFltVPrH &hash, int Proc) {
+  // Firstly send total size
+  int Len = hash.Len();
+  MPI_Send(&Len, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
+
+  TMOut streamDat;
+  int streamDatLen;
+
+  TMOut streamKey;
+  int streamKeyLen;
+
+  for (THashKeyDatI<TInt, TIntVFltVPr> i = hash.BegI(); !i.IsEnd(); i++) {
+    TIntVFltVPr dat = i.GetDat();
+    TInt key = i.GetKey();
+
+    // Data sending
+    dat.Save(streamDat);
+    streamDatLen = streamDat.Len();
+
+    std::vector<char> bufferDat(streamDatLen);
+    memcpy(bufferDat.data(), streamDat.GetBfAddr(), streamDatLen);
+
+    MPI_Send(&streamDatLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
+    MPI_Send(bufferDat.data(), streamDatLen, MPI_BYTE, Proc, 0, MPI_COMM_WORLD);
+    // Data sent
+
+    // Key sending
+    key.Save(streamKey);
+    streamKeyLen = streamKey.Len();
+
+    std::vector<char> bufferKey(streamKeyLen);
+    memcpy(bufferKey.data(), streamKey.GetBfAddr(), streamKeyLen);
+
+    MPI_Send(&streamKeyLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
+    MPI_Send(bufferKey.data(), streamKeyLen, MPI_BYTE, Proc, 0, MPI_COMM_WORLD);
+    // Key sent
+
+    streamDat.Clr();
+    streamKey.Clr();
+  }
+}
+
+void recvHM(TIntIntVFltVPrH &hash, int Proc) {
+  // First recv total hash len
+  int Len;
+  MPI_Recv(&Len, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+  // Dat variables
+  char *DatBuf;
+  int DatLen;
+  int StreamDatLen;
+
+  // Key variables
+  char *KeyBuf;
+  int KeyLen;
+  int StreamKeyLen;
+
+  for (int i = 0; i < Len; i++) {
+
+    TIntVFltVPr dat;
+    TInt key;
+
+    // Recv data
+    MPI_Recv(&StreamDatLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD,
+             MPI_STATUS_IGNORE);
+    DatBuf = (char *)malloc(StreamDatLen);
+    MPI_Recv(DatBuf, StreamDatLen, MPI_BYTE, Proc, 0, MPI_COMM_WORLD,
+             MPI_STATUS_IGNORE);
+
+    TMIn inDat(DatBuf, StreamDatLen, true);
+    dat.Load(inDat);
+    // free(DatBuf); NOT NEEDED
+    //  Recv data done
+
+    // Recv key
+    MPI_Recv(&StreamKeyLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD,
+             MPI_STATUS_IGNORE);
+    KeyBuf = (char *)malloc(StreamKeyLen);
+    MPI_Recv(KeyBuf, StreamKeyLen, MPI_BYTE, Proc, 0, MPI_COMM_WORLD,
+             MPI_STATUS_IGNORE);
+
+    TMIn inKey(KeyBuf, StreamKeyLen, true);
+    key.Load(inKey);
+    // free(KeyBuf); // NOT NEEDED
+    //  Recv key done
+
+    hash.AddDat(key, dat);
+  }
+}
+
+
+void SendResult(PWNet &ProcNet, int SelectedLen, int *SelectedBuff,
+                int SelfProc, int Proc) {
+
+  // int Lens[SelectedLen];
+  // int* Lens = (int*) malloc(SelectedLen*sizeof(int));
+  char **SendBuff = (char **)malloc(SelectedLen * sizeof(char *));
+
+  // std::vector<std::vector<char>> buffers(SelectedLen);
+  std::vector<int> Lens(SelectedLen);
+
+  // Send data that will be needed
+  MPI_Send(&SelfProc, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
+  MPI_Send(&SelectedLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
+  MPI_Send(SelectedBuff, SelectedLen, MPI_INT, Proc, 0, MPI_COMM_WORLD);
+  for (int i = 0; i < SelectedLen; ++i) {
+    // TMOut stream;
+    TIntIntVFltVPrH hash = ProcNet->GetNDat(SelectedBuff[i]);
+    sendHM(hash, Proc);
+  }
+
+  free(SendBuff);
+  free(SelectedBuff);
+}
+
+void RecvResult(PWNet &InNet) {
+  int Proc;
+  int SelectedLen;
+
+  MPI_Status status;
+  MPI_Recv(&Proc, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
+  MPI_Recv(&SelectedLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD,
+           MPI_STATUS_IGNORE);
+
+  int *SelectedBuff = (int *)malloc(SelectedLen * sizeof(int));
+  int *Lens = (int *)malloc(SelectedLen * sizeof(int));
+
+  MPI_Recv(SelectedBuff, SelectedLen, MPI_INT, Proc, 0, MPI_COMM_WORLD,
+           MPI_STATUS_IGNORE);
+
+  // Allocate and receive each buffer separately
+  for (int i = 0; i < SelectedLen; i++) {
+
+    THash<TInt, TPair<TVec<TInt, int>, TVec<TFlt, int> > > hash;
+
+    char *Buf;
+    int Len;
+
+    recvHM(hash, Proc);
+
+    InNet->SetNDat(SelectedBuff[i], hash);
+  }
+
+  free(SelectedBuff);
+  free(Lens);
 }
 
 THash<TInt, TBool> BFSStep(PWNet &InNet, THash<TInt, TBool> &HM,
@@ -1426,104 +1422,24 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
       
 
     }
-    printf("GOT OUT\n");
-    fflush(stdout);
 
-    // Start Recv for all remaining Procs
-    /*
-    while(!isDataConsumed(winStorages, Blocks)){
-      printf("Stuck\n");
+    // Should just be recv data from processes
+    for(int i = 1; i < numprocs; i++){
+      // TODO: Recv from process
+      printf("Start recv\n");
       fflush(stdout);
-
-      
-      MPI_Win_sync(resultWindow);
-      MPI_Win_sync(storageWindow);
-      
-      usleep(500000);
-
-    }
-    */
-    printf("GOT HERE TOO\n");
-    fflush(stdout);
-    // Dismiss processes
-      // TODO : Do something with the results vector
-      
-    // Base address
-    char* base = (char*)results;
-    char* ptr = base;
-    
-    // Before your while loop, read the actual amount of data written:
-    MPI_Aint finalOffset;
-    MPI_Win_lock(MPI_LOCK_SHARED, 0, 0, resultWindow);
-    MPI_Get(&finalOffset, 1, MPI_AINT, 0, dispResult, 1, MPI_AINT, resultWindow);
-    MPI_Win_flush(0, resultWindow);
-    MPI_Win_unlock(0, resultWindow);
-
-
-    // Skip the first 8 bytes (which hold the finalOffset itself)
-    ptr = base + sizeof(MPI_Aint);
-
-    // Loop only up to the data that was actually written
-    
-    // Loop up to the data that was actually written
-while(ptr - base < finalOffset) {
-
-    // 1. PADDING GUARD: 
-    // If the remaining space is smaller than our basic header (3 * TInt), 
-    // we have hit the 8-byte padding at the end of the buffer. Stop reading.
-    if (finalOffset - (ptr - base) < (MPI_Aint)(3 * sizeof(TInt))) {
-        break;
-    }
-
-    // Save the exact start position of this node block
-    char* nodeStart = ptr;
-    
-    // Read Headers
-    int totalSize = *((TInt*)ptr); ptr += sizeof(TInt);
-    
-    // Safety check: if totalSize is corrupted or 0 (padding), break out
-    if (totalSize < 3 * sizeof(TInt)) {
-        break;
-    }
-
-    int nodeId = *((TInt*)ptr); ptr += sizeof(TInt);
-    int numEntries = *((TInt*)ptr); ptr += sizeof(TInt);
-
-    printf("read -> %p | Node: %d | Entries: %d | Expected Size: %d\n", nodeStart - base, nodeId, numEntries, totalSize);
-    fflush(stdout);
-      
-    TIntIntVFltVPrH hash;
-
-    // Read entries
-    for(int i = 0; i < numEntries; i++){
-        int key = *((TInt*)ptr); ptr += sizeof(TInt);
-      
-        int intVLen = *((TInt*)ptr); ptr += sizeof(TInt);
-        TIntV intV(intVLen);
-        for(int j = 0; j < intVLen; j++){
-            intV[j] = (*(TInt*)ptr);
-            ptr += sizeof(TInt);
-        }
-          
-        int fltVLen = *((TInt*)ptr); ptr += sizeof(TInt);
-        TFltV fltV(fltVLen);
-        for(int j = 0; j < fltVLen; j++){
-            fltV[j] = (*(TFlt*)ptr);
-            ptr += sizeof(TFlt);
-        }
-        hash.AddDat(key, TPair<TIntV, TFltV>(intV, fltV));
+      RecvResult(InNet);      
     }
     
-    // TODO: Do whatever you need with 'hash' here before moving to the next node
-    
-    // 2. BLOCK GUARD: 
-    // Force the pointer to jump exactly to where the NEXT node starts.
-    // This ignores any inner-loop drift and relies on the accurate totalSize header.
-    ptr = nodeStart + totalSize;    
-}
-
   } else {
     
+    // Net to be used for processing
+    PWNet ProcNet = PWNet::New();
+    int index = 0;
+    int ProcSelectedLen[Blocks];
+    int* ProcSelectedBuff[Blocks];
+    
+
     MPI_Aint dispResult;
     MPI_Bcast(&dispResult, 1, MPI_AINT, 0, MPI_COMM_WORLD);
     // Start by getting the bcast that will also signal that the rma is active
@@ -1535,7 +1451,8 @@ while(ptr - base < finalOffset) {
     while(moreBlocks){
 
       printf("Before get first-> disp: %p, blocks: %d\n\n", disp, Blocks);
-      int result = getFirstAvailable(storageWindow, resultWindow, procResultWindow, disp, dispResult, initNode, ParamP, ParamQ, Blocks);
+      // TODO: Use the ProcNet here, later gather from it
+      int result = getFirstAvailable(ProcNet, storageWindow, resultWindow, procResultWindow, disp, dispResult, initNode, ParamP, ParamQ, Blocks, ProcSelectedLen, ProcSelectedBuff, index);
       
       if(result == -1){
         moreBlocks = false;
@@ -1547,11 +1464,33 @@ while(ptr - base < finalOffset) {
       } else {
         // Everything went right so nothing to do
         // Already put everything
+        index++;
       }
 
       
 
     }
+    
+    // Join all selected
+    // These are all the blocks that were filled
+    int totalSize = 0;
+    for(int i = 0; i < index; i++){
+      totalSize += ProcSelectedLen[i];
+    }
+    int* fullSelected = (int*)malloc(sizeof(int) * totalSize);
+    // Copy actual data
+    int* ptr = fullSelected;
+    for(int i = 0; i < index; i++){
+      // Copy data
+      memcpy(ptr, ProcSelectedBuff[i], ProcSelectedLen[i] * sizeof(int));
+      // Advance to next position
+      ptr += ProcSelectedLen[i];
+    }
+
+    int SelfProc;
+    MPI_Comm_rank(MPI_COMM_WORLD, &SelfProc);
+    
+    SendResult(ProcNet, totalSize, fullSelected, SelfProc, 0);
     printf("GOT OUT\n");
 
   }
