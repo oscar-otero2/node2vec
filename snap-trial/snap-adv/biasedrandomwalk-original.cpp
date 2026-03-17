@@ -86,6 +86,13 @@ void PreprocessNode (PWNet& InNet, const double& ParamP, const double& ParamQ,
   if (Verbose && NCnt%100 == 0) {
     printf("\rPreprocessing progress: %.2lf%% ",(double)NCnt*100/(double)(InNet->GetNodes()));fflush(stdout);
   }
+  
+  // NI IS T
+  // CURRI IS V
+
+  // WE ACCESS CURRI IN INDEX T
+  // SUCH WE SHOULD INIT THAT HASH WITH IN DEG??
+
   //for node t
   THash <TInt, TBool> NbrH;                                    //Neighbors of t
   for (int64 i = 0; i < NI.GetOutDeg(); i++) {

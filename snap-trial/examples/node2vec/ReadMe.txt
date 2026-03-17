@@ -43,3 +43,6 @@ mpiCC -std=c++98 -Wall -O3 -DNDEBUG -fopenmp  -o biased ../../snap-adv/biasedran
 Creates a non static executable of its main (where to place all tests to be done)
 
 mpiCC -std=c++98 -Wall -O3 -DNDEBUG -fopenmp  -o node2vec node2vec.cpp ../../snap-adv/n2v.cpp ../../snap-adv/word2vec.cpp ../../snap-adv/biasedrandomwalk.cpp ../../snap-core/Snap.o -I../../snap-core -I../../snap-adv -I../../glib-core  -lrt -fsanitize=address -g
+
+
+Este último es el comando que hay que utilizar pero sin los dos switches del final para hacer la compilación de todo junto. En la máquina puede ser que tenga que reducir algo la optimización del O3 a O2 o menos incluso. También cabe mencionar que habría que re-subir el código dadas las modificaciones hechas con el tema del paso de valores por referencia en lugar de crear copias completas, que con un poco de suerte y un milagro divino hará que funcione todo super guay cuando lo vuelva a probar en el cluster.

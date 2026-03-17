@@ -1425,7 +1425,9 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
 
     // Should just be recv data from processes
     // Can delete all windows
-    for(int i = 0; i < Blocks; i++){
+    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Win_free(&storageWindow);
+    for(int i = 1; i < Blocks; i++){
       free(winStorages[i]);
     }
     free(winStorages);
@@ -1495,6 +1497,8 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     int SelfProc;
     MPI_Comm_rank(MPI_COMM_WORLD, &SelfProc);
     
+    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Win_free(&storageWindow);
     SendResult(ProcNet, totalSize, fullSelected, SelfProc, 0);
     printf("GOT OUT\n");
 

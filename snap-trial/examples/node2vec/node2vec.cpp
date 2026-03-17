@@ -260,7 +260,7 @@ int main(int argc, char* argv[]) {
   // printf("Time to execute node2vec NAT %f\n", time_nat);
   printf("<process>%f</process>", time);
   printf("<natural>%f</natural>", time_nat);
-  printf("</node2vec>", time, time_nat);
+  printf("</node2vec>");
 
   printf("</execution>");
   // Write desired output (either walks or embeddings)
