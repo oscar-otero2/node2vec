@@ -764,7 +764,7 @@ void recvHM(TIntIntVFltVPrH &hash, int Proc) {
     // Recv data
     MPI_Recv(&StreamDatLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD,
              MPI_STATUS_IGNORE);
-    DatBuf = (char *)malloc(StreamDatLen);
+    DatBuf = new char[StreamDatLen];
     MPI_Recv(DatBuf, StreamDatLen, MPI_BYTE, Proc, 0, MPI_COMM_WORLD,
              MPI_STATUS_IGNORE);
 
@@ -776,7 +776,7 @@ void recvHM(TIntIntVFltVPrH &hash, int Proc) {
     // Recv key
     MPI_Recv(&StreamKeyLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD,
              MPI_STATUS_IGNORE);
-    KeyBuf = (char *)malloc(StreamKeyLen);
+    KeyBuf = new char[StreamKeyLen];
     MPI_Recv(KeyBuf, StreamKeyLen, MPI_BYTE, Proc, 0, MPI_COMM_WORLD,
              MPI_STATUS_IGNORE);
 
