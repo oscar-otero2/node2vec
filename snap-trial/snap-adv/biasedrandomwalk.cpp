@@ -1367,18 +1367,18 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
   THash<TInt, TBool> SelectedRank0;
   if (rank == 0) {
 
-    totalSize = initResultStorage(InNet, &results);
+    //totalSize = initResultStorage(InNet, &results);
 
     // Alloc everything to be received
-    MPI_Win_attach(resultWindow, results, totalSize);
+    //MPI_Win_attach(resultWindow, results, totalSize);
 
     MPI_Aint dispResult;
-    MPI_Get_address(results, &dispResult);
+    //MPI_Get_address(results, &dispResult);
 
-    *((MPI_Aint*)results) = (MPI_Aint)sizeof(MPI_Aint);
+    //*((MPI_Aint*)results) = (MPI_Aint)sizeof(MPI_Aint);
 
-    MPI_Win_sync(resultWindow);
-    MPI_Bcast(&dispResult, 1, MPI_AINT, 0, MPI_COMM_WORLD);
+    //MPI_Win_sync(resultWindow);
+    //MPI_Bcast(&dispResult, 1, MPI_AINT, 0, MPI_COMM_WORLD);
 
     int BlocksSent = 0;
     // Blocks of storage
@@ -1424,6 +1424,11 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     }
 
     // Should just be recv data from processes
+    // Can delete all windows
+    for(int i = 0; i < Blocks; i++){
+      free(winStorages[i]);
+    }
+    free(winStorages);
     for(int i = 1; i < numprocs; i++){
       // TODO: Recv from process
       printf("Start recv\n");
@@ -1441,7 +1446,7 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     
 
     MPI_Aint dispResult;
-    MPI_Bcast(&dispResult, 1, MPI_AINT, 0, MPI_COMM_WORLD);
+    //MPI_Bcast(&dispResult, 1, MPI_AINT, 0, MPI_COMM_WORLD);
     // Start by getting the bcast that will also signal that the rma is active
     MPI_Aint disp;
     MPI_Bcast(&disp, 1, MPI_AINT, 0, MPI_COMM_WORLD);
