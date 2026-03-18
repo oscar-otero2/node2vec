@@ -1296,6 +1296,7 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     }
 
     // For each node in InNet
+    /*
     for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
       // For all neighbours
       for (int64 i = 0; i < NI.GetOutDeg();
@@ -1310,6 +1311,7 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
                                                   TFltV(CurrI.GetOutDeg())));
       }
     }
+    */
 
     int64 NCnt = 0;
     TIntV NIds;
