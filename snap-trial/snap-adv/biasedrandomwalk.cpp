@@ -1437,7 +1437,19 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
       // TODO: Recv from process
       printf("Start recv\n");
       fflush(stdout);
+
+    clock_t begin = clock();
+    double begin_nat = omp_get_wtime();
+
       RecvResult(InNet);      
+
+    clock_t end = clock();
+    double end_nat = omp_get_wtime();
+
+    double _time = double(end - begin) / CLOCKS_PER_SEC;
+    double _time_nat = end_nat - begin_nat;
+
+    printf("<recv_result process=\"%f\" natural=\"%f\" />", _time, _time_nat);
     }
     
   } else {
