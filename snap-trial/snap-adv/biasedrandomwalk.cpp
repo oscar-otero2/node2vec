@@ -665,7 +665,19 @@ void DistributeGraph(PWNet &InNet, int NumProcs, int Blocks, Storage* Stored, Pr
         
         // Receive results of the process and send new data to it
         // This automatically gets data into the net
+        
+    clock_t begin = clock();
+    double begin_nat = omp_get_wtime();
+
         int Proc = RecvResult(InNet, Status);
+
+    clock_t end = clock();
+    double end_nat = omp_get_wtime();
+
+    double _time = double(end - begin) / CLOCKS_PER_SEC;
+    double _time_nat = end_nat - begin_nat;
+
+    printf("<recv_result process=\"%f\" natural=\"%f\" />", _time, _time_nat);
 
 
         int Response = SENDING_BLOCK;
@@ -984,7 +996,20 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     // Start Recv for all remaining Procs
     while(DataLeft(Stored, Blocks)){
       
-      int Proc = RecvResult(InNet, Status);
+
+    clock_t begin = clock();
+    double begin_nat = omp_get_wtime();
+
+        int Proc = RecvResult(InNet, Status);
+
+    clock_t end = clock();
+    double end_nat = omp_get_wtime();
+
+    double _time = double(end - begin) / CLOCKS_PER_SEC;
+    double _time_nat = end_nat - begin_nat;
+
+    printf("<recv_result process=\"%f\" natural=\"%f\" />", _time, _time_nat);
+
       
       int Response = SENDING_BLOCK;
       MPI_Send(&Response, 1, MPI_INT, Proc, REQUEST, MPI_COMM_WORLD);
@@ -1005,7 +1030,21 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     // Until all procs have sent
     while(!ProcsFinished(Status)){
 
-      int Proc = RecvResult(InNet, Status);
+
+    clock_t begin = clock();
+    double begin_nat = omp_get_wtime();
+
+        int Proc = RecvResult(InNet, Status);
+
+    clock_t end = clock();
+    double end_nat = omp_get_wtime();
+
+    double _time = double(end - begin) / CLOCKS_PER_SEC;
+    double _time_nat = end_nat - begin_nat;
+
+    printf("<recv_result process=\"%f\" natural=\"%f\" />", _time, _time_nat);
+
+      
       
       int Response = NO_MORE_BLOCKS;
       MPI_Send(&Response, 1, MPI_INT, Proc, REQUEST, MPI_COMM_WORLD);
