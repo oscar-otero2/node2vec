@@ -444,7 +444,7 @@ void DistributeGraph(PWNet &InNet, int NumProcs,
 
     // Only out edges until last iteration, when we'll get in and out ones
 
-    //while (Selected.Len() < ToBeSelected && !HM.Empty()) {
+    while (Selected.Len() < ToBeSelected && !HM.Empty()) {
     //  Make sure that all nodes are being visited still
     //  Usual condition + safeguard to always finish sending
     
@@ -454,7 +454,7 @@ void DistributeGraph(PWNet &InNet, int NumProcs,
     //  (((TotalEdges / 2) < ToBeSelectedEdges && Selected.Len() < ToBeSelected) && !HM.Empty()) 
     //  || (i == NumProcs-1 && !HM.Empty())
     //  ){
-    while ((TotalEdges < ToBeSelectedEdges && !HM.Empty()) || (i == NumProcs-1 && !HM.Empty())){
+    //while ((TotalEdges < ToBeSelectedEdges && !HM.Empty()) || (i == NumProcs-1 && !HM.Empty())){
 
       LastStep = BFSStep(InNet, HM, LastStep, Selected, Edges,
                          ToBeSelectedEdges - Edges.Len(), ToBeSelected - Selected.Len(), TotalEdges, true);
