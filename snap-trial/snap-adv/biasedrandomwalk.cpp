@@ -16,6 +16,12 @@ void AddEdgeNotDirected(PWNet &InNet, int64 SrcNId, int64 DstNId) {
 }
 
 int64 AliasDrawInt(TIntVFltVPr &NTTable, TRnd &Rnd);
+
+
+void PreprocessNode(PWNet &InNet, const double &ParamP, const double &ParamQ,
+                    TWNet::TNodeI NI, int64 &NCnt, const bool &Verbose
+                    ,THash<TInt, TBool> &Selected);
+
 void PreprocessNodeParallel(PWNet &InNet, const double &ParamP,
                             const double &ParamQ, TWNet::TNodeI NI);
 void PreprocessNodeAux(PWNet &InNet, const double &ParamP, const double &ParamQ,
@@ -314,9 +320,40 @@ PWNet RecvChunk(int *SelectedLen, int **SelectedBuff, double ParamP,
   }
   // Return Selected in some incredible way
 
-  for (int i = 0; i < *SelectedLen; i++) {
-    PreprocessNodeParallel(ProcNet, ParamP, ParamQ,
-                           ProcNet->GetNI((*SelectedBuff)[i]));
+  // Build the selected hm
+  THash<TInt, TBool> Selected;
+  for(int i = 0; i < *SelectedLen; i++) {
+    Selected.AddKey((*SelectedBuff)[i]);
+  }
+  
+  // Now we need prealloc
+  // For each node in InNet
+    for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
+      ProcNet->SetNDat(NI.GetId(), TIntIntVFltVPrH());
+    }
+
+    // For each node in InNet
+    for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
+      // For all neighbours
+      for (int64 i = 0; i < NI.GetOutDeg();
+           i++) { // allocating space in advance to avoid issues with
+                  // multithreading
+        TWNet::TNodeI CurrI = ProcNet->GetNI(NI.GetNbrNId(i));
+        // Get node data (what is it)
+        // Add to it (as hashtable) (its id, a pair of an int vector and a float
+        // vector of the size of the out degree of the node)
+        CurrI.GetDat().AddDat(NI.GetId(),
+                              TPair<TIntV, TFltV>(TIntV(CurrI.GetOutDeg()),
+                                                  TFltV(CurrI.GetOutDeg())));
+      }
+    }
+  
+  //for (int i = 0; i < *SelectedLen; i++) {
+  long w = 0;
+  bool f = false;
+  for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
+    PreprocessNode(ProcNet, ParamP, ParamQ,
+                           NI, w, f, Selected);
   }
 
   free(EdgesBuff);
@@ -655,7 +692,9 @@ int64 AliasDrawInt(TIntVFltVPr &NTTable, TRnd &Rnd) {
 // Because its end goal is to give us the probabilities of taking each edge
 // They are given in the node itself(?)
 void PreprocessNode(PWNet &InNet, const double &ParamP, const double &ParamQ,
-                    TWNet::TNodeI NI, int64 &NCnt, const bool &Verbose) {
+                    TWNet::TNodeI NI, int64 &NCnt, const bool &Verbose
+                    ,THash<TInt, TBool> &Selected
+                    ) {
   if (Verbose && NCnt % 100 == 0) {
     printf("\rPreprocessing progress: %.2lf%% ",
            (double)NCnt * 100 / (double)(InNet->GetNodes()));
@@ -670,6 +709,12 @@ void PreprocessNode(PWNet &InNet, const double &ParamP, const double &ParamQ,
   // For each neighbour
   for (int64 i = 0; i < NI.GetOutDeg(); i++) {
     TWNet::TNodeI CurrI = InNet->GetNI(NI.GetNbrNId(i)); // for each node v
+    
+    // Only write and process nodes that have been selected
+    if(!Selected.IsKey(CurrI.GetId())){
+      continue;
+    }
+
     double Psum = 0;
     TFltV PTable; // Probability distribution table
 
@@ -793,8 +838,12 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
 
     // Try using Whole net
     // It shall work nice this way
-    for (THash<TInt, TBool>::TIter i = SelectedRank0.BegI(); !i.IsEnd(); i++) {
-      PreprocessNodeParallel(InNet, ParamP, ParamQ, InNet->GetNI(i.GetKey()));
+    long w = 0;
+    bool f = false;
+    //for (THash<TInt, TBool>::TIter i = SelectedRank0.BegI(); !i.IsEnd(); i++) {
+    for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
+      //PreprocessNodeParallel(InNet, ParamP, ParamQ, InNet->GetNI(i.GetKey()));
+      PreprocessNode(InNet, ParamP, ParamQ, NI, w, f, SelectedRank0);
     }
 
     end = clock();
