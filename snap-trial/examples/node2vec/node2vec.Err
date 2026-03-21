@@ -3,3 +3,123 @@
 Thu Nov 21 17:12:27 2024
 Execution stopped: IsFlt(false, 0, 0, Val), file ../../glib-core/dt.h, line 632
 --------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Tue Feb 10 21:40:48 2026
+Execution stopped: KeyId!=-1, file ../../glib-core/hash.h, line 440
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Tue Feb 10 21:42:23 2026
+Execution stopped: KeyId!=-1, file ../../glib-core/hash.h, line 440
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Tue Feb 10 21:42:54 2026
+Execution stopped: KeyId!=-1, file ../../glib-core/hash.h, line 440
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Tue Feb 10 21:46:17 2026
+Execution stopped: KeyId!=-1, file ../../glib-core/hash.h, line 440
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Tue Feb 10 21:48:38 2026
+Execution stopped: KeyId!=-1, file ../../glib-core/hash.h, line 440
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Tue Feb 10 21:50:08 2026
+Execution stopped: KeyId!=-1, file ../../glib-core/hash.h, line 440
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Tue Feb 10 21:52:59 2026
+Execution stopped: KeyId!=-1, file ../../glib-core/hash.h, line 440
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Tue Feb 10 21:54:55 2026
+Execution stopped: KeyId!=-1, file ../../glib-core/hash.h, line 440
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Wed Feb 11 14:30:30 2026
+Execution stopped: ! Empty(), file ../../glib-core/hash.h, line 469
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Wed Feb 11 14:31:32 2026
+Execution stopped: ! Empty(), file ../../glib-core/hash.h, line 469
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Wed Feb 11 14:33:30 2026
+Execution stopped: ! Empty(), file ../../glib-core/hash.h, line 469
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Wed Feb 11 14:34:18 2026
+Execution stopped: ! Empty(), file ../../glib-core/hash.h, line 469
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Wed Feb 11 14:39:01 2026
+Execution stopped: ! Empty(), file ../../glib-core/hash.h, line 469
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Fri Feb 20 20:19:12 2026
+Execution stopped: IsNode(SrcNId) && IsNode(DstNId) [Reason:'-1 or 0 not a node.'], file ../../snap-core/network.h, line 820
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Fri Feb 20 20:19:12 2026
+Execution stopped: IsNode(SrcNId) && IsNode(DstNId) [Reason:'4 or -1 not a node.'], file ../../snap-core/network.h, line 820
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Fri Feb 20 20:19:12 2026
+Execution stopped: IsNode(SrcNId) && IsNode(DstNId) [Reason:'-1 or -1 not a node.'], file ../../snap-core/network.h, line 820
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Fri Feb 20 20:20:31 2026
+Execution stopped: IsNode(SrcNId) && IsNode(DstNId) [Reason:'-1 or 18028 not a node.'], file ../../snap-core/network.h, line 820
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Fri Feb 20 20:20:31 2026
+Execution stopped: IsNode(SrcNId) && IsNode(DstNId) [Reason:'-1 or 71841 not a node.'], file ../../snap-core/network.h, line 820
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Sat Feb 21 02:44:38 2026
+Execution stopped: IsNode(SrcNId) && IsNode(DstNId) [Reason:'-2 or -1 not a node.'], file ../../snap-core/network.h, line 820
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Sat Feb 21 02:45:11 2026
+Execution stopped: IsNode(SrcNId) && IsNode(DstNId) [Reason:'-2 or -1 not a node.'], file ../../snap-core/network.h, line 820
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Sat Feb 21 02:45:16 2026
+Execution stopped: IsNode(SrcNId) && IsNode(DstNId) [Reason:'-2 or -1 not a node.'], file ../../snap-core/network.h, line 820
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Sat Feb 21 02:45:23 2026
+Execution stopped: IsNode(SrcNId) && IsNode(DstNId) [Reason:'-2 or -1 not a node.'], file ../../snap-core/network.h, line 820
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Sat Feb 21 02:47:58 2026
+Execution stopped: IsNode(SrcNId) && IsNode(DstNId) [Reason:'-2 or -1 not a node.'], file ../../snap-core/network.h, line 820
+--------
+--------
+/home/oscar/Escritorio/tfg/node2vec/snap-trial/examples/node2vec/node2vec.Err
+Sat Feb 21 02:49:09 2026
+Execution stopped: IsNode(SrcNId) && IsNode(DstNId) [Reason:'-2 or -1 not a node.'], file ../../snap-core/network.h, line 820
+--------
