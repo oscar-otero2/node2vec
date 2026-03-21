@@ -746,7 +746,7 @@ void consumeBuffer(z_stream& strm, Bytef* temp_out, std::vector<Bytef>& compress
     // Perform compression
     int ret = deflate(&strm, flush);
     if (ret == Z_STREAM_ERROR) {
-      std::cerr << "Deflate error!" << std::endl;
+      printf("DEFLATE ERROR!\n");
       deflateEnd(&strm);
       exit(-1);
     }
@@ -771,9 +771,9 @@ void pukeBuffer(z_stream& strm, Bytef* temp_out, std::vector<char>& decompressed
         ret = inflate(&strm, Z_NO_FLUSH);
         
         if (ret == Z_STREAM_ERROR || ret == Z_DATA_ERROR || ret == Z_MEM_ERROR) {
-            std::cerr << "Inflate error: " << ret << std::endl;
+            printf("INFLATE ERROR!\n");
             inflateEnd(&strm);
-            return;
+            exit(-1);
         }
 
         // Calculate how many bytes were uncompressed in this pass
@@ -801,8 +801,8 @@ void sendHM(TIntIntVFltVPrH &hash, int Proc) {
   std::memset(&strm, 0, sizeof(strm));
 
   // TODO: Check higher compression level
-  //if(deflateInit(&strm, Z_DEFAULT_COMPRESSION) != Z_OK) {
-  if(deflateInit(&strm, 9) != Z_OK) {
+  if(deflateInit(&strm, Z_DEFAULT_COMPRESSION) != Z_OK) {
+  //if(deflateInit(&strm, 9) != Z_OK) {
     printf("ERROR ON ZLIB!\n");
     exit(-1);
   }
