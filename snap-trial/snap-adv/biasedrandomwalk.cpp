@@ -41,11 +41,11 @@ void PrintH(TIntIntVFltVPrH data) {
   } while (data.FNextKeyId(keyId));
 }
 
-THash<TInt, TBool> BFSStep(PWNet &InNet, const THash<TInt, TBool> &HM,
+THash<TInt, TBool> BFSStep(PWNet &InNet, THash<TInt, TBool> &HM,
                            const THash<TInt, TBool> &LastStep,
                            THash<TInt, TBool> &Selected,
                            THash<TPair<TInt, TInt>, TFlt> &Edges,
-                           int ToBeSelectedEdges, bool OnlyOut) {
+                           int ToBeSelectedEdges, int ToBeSelected, int& TotalEdges, bool OnlyOut) {
   // Iterate over HM (probs won't work)
 
   THash<TInt, TBool> ThisStep;
@@ -54,7 +54,7 @@ THash<TInt, TBool> BFSStep(PWNet &InNet, const THash<TInt, TBool> &HM,
   // them
   if (!OnlyOut) {
     // Copy of that one loop
-    for (THash<TInt, TBool>::TIter i = LastStep.BegI(); !i.IsEnd(); i.Next()) {
+    for (THash<TInt, TBool>::TIter i = Selected.BegI(); !i.IsEnd(); i.Next()) {
 
       TWNet::TNodeI CurrI = InNet->GetNI(i.GetKey());
 
@@ -63,6 +63,7 @@ THash<TInt, TBool> BFSStep(PWNet &InNet, const THash<TInt, TBool> &HM,
         int n = CurrI.GetNbrNId(j);
         if (!Selected.IsKey(n)) {
           ThisStep.AddKey(n);
+          TotalEdges += InNet->GetNI(n).GetDeg();
         }
         // Edges shall be added whether the node was collected before or not
         int v = CurrI.GetId();
@@ -98,6 +99,8 @@ THash<TInt, TBool> BFSStep(PWNet &InNet, const THash<TInt, TBool> &HM,
       // Only for new nodes
       if (!Selected.IsKey(n) && HM.IsKey(n)) {
         Selected.AddKey(n);
+        HM.DelKey(n);
+        TotalEdges += InNet->GetNI(n).GetDeg();
         ThisStep.AddKey(n);
 
         // Id of source node
@@ -108,14 +111,21 @@ THash<TInt, TBool> BFSStep(PWNet &InNet, const THash<TInt, TBool> &HM,
 
         // printf("new nodes: %d\n", n);
       }
+
+    if (TotalEdges  >= ToBeSelectedEdges) {
+      break;
     }
 
-    if (Edges.Len() >= ToBeSelectedEdges) {
+    }
+
+    
+    if (TotalEdges  >= ToBeSelectedEdges) {
       break;
     }
   }
   return ThisStep;
 }
+
 
 void sendHM(TIntIntVFltVPrH &hash, int Proc) {
   // Firstly send total size
@@ -455,6 +465,7 @@ void DistributeGraph(PWNet &InNet, int NumProcs,
   for (int i = 0; i < NumProcs; i++) { // Get key TODO (from random node in HM)
     // This sampling is faulty
     // TWNet::TNodeI Rand = InNet->GetRndNI(rand);
+    int TotalEdges = 0;
 
     THash<TInt, TBool> Selected;
     THash<TInt, TBool> LastStep;
@@ -470,44 +481,41 @@ void DistributeGraph(PWNet &InNet, int NumProcs,
 
     int Rand = HM.GetKey(HM.GetRndKeyId(rand));
     Selected.AddKey(Rand);
+    TotalEdges += InNet->GetNI(Rand).GetDeg();
     LastStep.AddKey(Rand);
     HM.DelKey(Rand);
 
     // Only out edges until last iteration, when we'll get in and out ones
 
-    while (Selected.Len() < ToBeSelected && !HM.Empty()) {
-    //  Make sure that all nodes are being visited still
-    //while (Edges.Len() < ToBeSelectedEdges && !HM.Empty()) {
+    while ((TotalEdges / 2 < ToBeSelectedEdges && !HM.Empty()) || (i == NumProcs-1 && !HM.Empty())){
 
       LastStep = BFSStep(InNet, HM, LastStep, Selected, Edges,
-                         ToBeSelectedEdges - Edges.Len(), true);
+                         ToBeSelectedEdges - Edges.Len(), ToBeSelected - Selected.Len(), TotalEdges, true);
       if (LastStep.Empty()) {
 
         // This method is scarily biased, but random sampling of the hash is
         // faulty as it returns nonexistant ids over and over (0)
+        
         int NewKey = HM.GetKey(HM.GetRndKeyId(rand));
         Selected.AddKey(NewKey);
+        TotalEdges += InNet->GetNI(NewKey).GetDeg();
         HM.DelKey(NewKey);
         LastStep.AddKey(NewKey);
 
       } else {
-      for (THash<TInt, TBool>::TIter j = LastStep.BegI(); !j.IsEnd();
-           j.Next()) {
-        Selected.AddKey(j.GetKey());
-        HM.DelKey(j.GetKey());
-      }
       }
     }
 
-    printf("\nRank: %d -> (%d nodes) (%d edges) ", i, Selected.Len(),
-           Edges.Len());
+    printf("\nRank: %d -> (%d nodes) (%d edges) (%d estimated) ", i, Selected.Len(),
+           Edges.Len(), TotalEdges/2);
 
     THash<TInt, TBool> Additional =
-        BFSStep(InNet, HM, Selected, Selected, Edges, 0, false);
+        BFSStep(InNet, HM, Selected, Selected, Edges, 0, 0, TotalEdges, false);
 
     printf("After addit (%d edges)\n", Edges.Len());
 
-    if (i == 0) {
+    // Everything shifted one
+    if (i == NumProcs-1) {
       PWNet ProcNet = PWNet::New();
 
       for (THash<TPair<TInt, TInt>, TFlt>::TIter i = Edges.BegI(); !i.IsEnd();
@@ -531,7 +539,7 @@ void DistributeGraph(PWNet &InNet, int NumProcs,
       ProcNet0 = ProcNet;
       SelectedRank0 = Selected;
     } else {
-      SendChunk(Selected, Edges, i);
+      SendChunk(Selected, Edges, i+1);
     }
 
     // SendChunk(Selected, Edges, i);
