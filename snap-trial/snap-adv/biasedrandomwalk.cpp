@@ -495,6 +495,7 @@ void RecvChunk(double ParamP,
 
   // Reserve mem
   // For each node in InNet
+  /*
     for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
       // For all neighbours
       for (int64 i = 0; i < NI.GetOutDeg();
@@ -509,20 +510,23 @@ void RecvChunk(double ParamP,
                                                   TFltV(CurrI.GetOutDeg())));
       }
     }
+    */
 
   long w = 0;
   bool f = false;
   
+  /*
   THash<TInt, TBool> Selected;
   for (int i = 0; i < SelectedLen; i++) {
     Selected.AddKey(SelectedBuff[i]);
   }
+  */
 
-  for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
-  //for (int i = 0; i < SelectedLen; i++) {
-    //PreprocessNodeParallel(ProcNet, ParamP, ParamQ,
-    //                       ProcNet->GetNI((SelectedBuff)[i]));
-    PreprocessNode(ProcNet, ParamP, ParamQ, NI, w, f, Selected);
+  //for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
+  for (int i = 0; i < SelectedLen; i++) {
+    PreprocessNodeParallel(ProcNet, ParamP, ParamQ,
+                           ProcNet->GetNI((SelectedBuff)[i]));
+    //PreprocessNode(ProcNet, ParamP, ParamQ, NI, w, f, Selected);
   }
 
     clock_t end = clock();
@@ -1117,6 +1121,7 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
   if (rank == 0) {
     // Proc 0 isn't sending
 
+    /*
     for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
       int id = NI.GetId();
 
@@ -1131,6 +1136,7 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
         TFltV fltv = vect.GetVal2();
       }
     }
+    */
 
   } else {
   }
