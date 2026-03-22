@@ -286,10 +286,15 @@ MPI_Win_flush(0, storageWindow);
 
   long w = 0;
   bool f = false;
+
+  THash<TInt, TBool> Selected;
+  for(int i = 0; i < selectedLen; i++){
+    Selected.AddKey(selected[i]);
+  }
   
   for (int i = 0; i < selectedLen; i++) {
-    PreprocessNodeParallel(InNet, ParamP, ParamQ, InNet->GetNI((selected)[i]));
-    //PreprocessNode(InNet, ParamP, ParamQ, InNet->GetNI((selected)[i]), w, f, Selected);
+    //PreprocessNodeParallel(InNet, ParamP, ParamQ, InNet->GetNI((selected)[i]));
+    PreprocessNode(InNet, ParamP, ParamQ, InNet->GetNI((selected)[i]), w, f, Selected);
   }
 
     clock_t end = clock();
@@ -438,10 +443,37 @@ MPI_Win_flush(0, storageWindow);
   clock_t begin = clock();
   double begin_nat = omp_get_wtime();
   
-  for (int i = 0; i < selectedLen; i++) {
-  //for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
-    PreprocessNodeParallel(ProcNet, ParamP, ParamQ, ProcNet->GetNI(selected[i]));
-    //PreprocessNode(ProcNet, ParamP, ParamQ, NI, w, f, Selected);
+  THash<TInt, TBool> Selected;
+  for(int i = 0; i < selectedLen; i++){
+    Selected.AddKey(selected[i]);
+  }
+  
+  // Only alloc for newly alloc'd (the only we're writing into right?)
+for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
+      // For all neighbours
+      for (int64 i = 0; i < NI.GetOutDeg();
+           i++) { // allocating space in advance to avoid issues with
+                  // multithreading
+        TWNet::TNodeI CurrI = ProcNet->GetNI(NI.GetNbrNId(i));
+        if(!Selected.IsKey(CurrI.GetId())){
+          continue;
+        }
+        // Get node data (what is it)
+        // Add to it (as hashtable) (its id, a pair of an int vector and a float
+        // vector of the size of the out degree of the node)
+        CurrI.GetDat().AddDat(NI.GetId(),
+                              TPair<TIntV, TFltV>(TIntV(CurrI.GetOutDeg()),
+                                                  TFltV(CurrI.GetOutDeg())));
+      }
+    }
+
+  long w = 0;
+  bool f = false;
+  
+  //for (int i = 0; i < selectedLen; i++) {
+  for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
+    //PreprocessNodeParallel(ProcNet, ParamP, ParamQ, ProcNet->GetNI(selected[i]));
+    PreprocessNode(ProcNet, ParamP, ParamQ, NI, w, f, Selected);
   }
 
     clock_t end = clock();
