@@ -848,10 +848,10 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     // It shall work nice this way
     long w = 0;
     bool f = false;
-    //for (THash<TInt, TBool>::TIter i = SelectedRank0.BegI(); !i.IsEnd(); i++) {
-    for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
+    for (THash<TInt, TBool>::TIter i = SelectedRank0.BegI(); !i.IsEnd(); i++) {
+    //for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
       //PreprocessNodeParallel(InNet, ParamP, ParamQ, InNet->GetNI(i.GetKey()));
-      PreprocessNode(InNet, ParamP, ParamQ, NI, w, f, SelectedRank0);
+      PreprocessNode(InNet, ParamP, ParamQ, InNet->GetNI(i.GetKey()), w, f, SelectedRank0);
     }
 
     end = clock();
