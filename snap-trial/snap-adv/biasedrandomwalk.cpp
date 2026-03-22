@@ -349,6 +349,59 @@ void SendChunk(THash<TInt, TBool> Selected,
   SendChunk(Stored, Status, Proc);
 }
 
+void PreprocessNode (PWNet& InNet, const double& ParamP, const double& ParamQ,
+ TWNet::TNodeI NI, int64& NCnt, const bool& Verbose, THash<TInt, TBool> Selected) {
+  if (Verbose && NCnt%100 == 0) {
+    printf("\rPreprocessing progress: %.2lf%% ",(double)NCnt*100/(double)(InNet->GetNodes()));fflush(stdout);
+  }
+  //for node t
+  THash <TInt, TBool> NbrH;                                    //Neighbors of t
+  for (int64 i = 0; i < NI.GetOutDeg(); i++) {
+    NbrH.AddKey(NI.GetNbrNId(i));
+  } 
+
+  // For each neighbour
+  for (int64 i = 0; i < NI.GetOutDeg(); i++) {
+    TWNet::TNodeI CurrI = InNet->GetNI(NI.GetNbrNId(i));      //for each node v
+    
+    if(!Selected.IsKey(CurrI.GetId())){
+      continue;
+    }
+
+    double Psum = 0;
+    TFltV PTable;                              //Probability distribution table
+
+    // For each neighbour's neighbours
+    for (int64 j = 0; j < CurrI.GetOutDeg(); j++) {           //for each node x
+      int64 FId = CurrI.GetNbrNId(j);
+      TFlt Weight;
+      
+      // If <something> ignore x node
+      // All of the values that appear after this are directly explained in the paper:
+      // Section 3.2.2
+      if (!(InNet->GetEDat(CurrI.GetId(), FId, Weight))){ continue; }
+      if (FId==NI.GetId()) {
+        PTable.Add(Weight / ParamP);
+        Psum += Weight / ParamP;
+      } else if (NbrH.IsKey(FId)) {
+        PTable.Add(Weight);
+        Psum += Weight;
+      } else {
+        PTable.Add(Weight / ParamQ);
+        Psum += Weight / ParamQ;
+      }
+    }
+    //Normalizing table
+    for (int64 j = 0; j < CurrI.GetOutDeg(); j++) {
+      PTable[j] /= Psum;
+    }
+    // Main result of these calculations is the PTable, unique for each node, that requires up to 2 distance neighbours for each of these
+    // Only NTTAble is being modified.
+    GetNodeAlias(PTable,CurrI.GetDat().GetDat(NI.GetId()));
+  }
+  NCnt++;
+}
+
 void SendChunk(Storage& Stored, ProcStatus& Status, int Proc) {
     
   // Send selected
@@ -440,11 +493,36 @@ void RecvChunk(double ParamP,
   clock_t begin = clock();
     double begin_nat = omp_get_wtime();
 
+  // Reserve mem
+  // For each node in InNet
+    for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
+      // For all neighbours
+      for (int64 i = 0; i < NI.GetOutDeg();
+           i++) { // allocating space in advance to avoid issues with
+                  // multithreading
+        TWNet::TNodeI CurrI = ProcNet->GetNI(NI.GetNbrNId(i));
+        // Get node data (what is it)
+        // Add to it (as hashtable) (its id, a pair of an int vector and a float
+        // vector of the size of the out degree of the node)
+        CurrI.GetDat().AddDat(NI.GetId(),
+                              TPair<TIntV, TFltV>(TIntV(CurrI.GetOutDeg()),
+                                                  TFltV(CurrI.GetOutDeg())));
+      }
+    }
 
-
+  long w = 0;
+  bool f = false;
+  
+  THash<TInt, TBool> Selected;
   for (int i = 0; i < SelectedLen; i++) {
-    PreprocessNodeParallel(ProcNet, ParamP, ParamQ,
-                           ProcNet->GetNI((SelectedBuff)[i]));
+    Selected.AddKey(SelectedBuff[i]);
+  }
+
+  for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
+  //for (int i = 0; i < SelectedLen; i++) {
+    //PreprocessNodeParallel(ProcNet, ParamP, ParamQ,
+    //                       ProcNet->GetNI((SelectedBuff)[i]));
+    PreprocessNode(ProcNet, ParamP, ParamQ, NI, w, f, Selected);
   }
 
     clock_t end = clock();
@@ -847,65 +925,6 @@ int64 AliasDrawInt(TIntVFltVPr &NTTable, TRnd &Rnd) {
   double Y = Rnd.GetUniDev();
   return Y < NTTable.GetVal2()[X] ? X : NTTable.GetVal1()[X];
 }
-
-// Process each node
-// This is an interesting function but I don't think I need to explain it all
-// Because its end goal is to give us the probabilities of taking each edge
-// They are given in the node itself(?)
-void PreprocessNode(PWNet &InNet, const double &ParamP, const double &ParamQ,
-                    TWNet::TNodeI NI, int64 &NCnt, const bool &Verbose) {
-  if (Verbose && NCnt % 100 == 0) {
-    printf("\rPreprocessing progress: %.2lf%% ",
-           (double)NCnt * 100 / (double)(InNet->GetNodes()));
-    fflush(stdout);
-  }
-  // for node t
-  THash<TInt, TBool> NbrH; // Neighbors of t
-  for (int64 i = 0; i < NI.GetOutDeg(); i++) {
-    NbrH.AddKey(NI.GetNbrNId(i));
-  }
-
-  // For each neighbour
-  for (int64 i = 0; i < NI.GetOutDeg(); i++) {
-    TWNet::TNodeI CurrI = InNet->GetNI(NI.GetNbrNId(i)); // for each node v
-    double Psum = 0;
-    TFltV PTable; // Probability distribution table
-
-    // For each neighbour's neighbours
-    for (int64 j = 0; j < CurrI.GetOutDeg(); j++) { // for each node x
-      int64 FId = CurrI.GetNbrNId(j);
-      TFlt Weight;
-
-      // If <something> ignore x node
-      // All of the values that appear after this are directly explained in the
-      // paper: Section 3.2.2
-      if (!(InNet->GetEDat(CurrI.GetId(), FId, Weight))) {
-        continue;
-      }
-      if (FId == NI.GetId()) {
-        PTable.Add(Weight / ParamP);
-        Psum += Weight / ParamP;
-      } else if (NbrH.IsKey(FId)) {
-        PTable.Add(Weight);
-        Psum += Weight;
-      } else {
-        PTable.Add(Weight / ParamQ);
-        Psum += Weight / ParamQ;
-      }
-    }
-    // Normalizing table
-    for (int64 j = 0; j < CurrI.GetOutDeg(); j++) {
-      PTable[j] /= Psum;
-    }
-    // Main result of these calculations is the PTable, unique for each node,
-    // that requires up to 2 distance neighbours for each of these Only NTTAble
-    // is being modified.
-    GetNodeAlias(PTable, CurrI.GetDat().GetDat(NI.GetId()));
-  }
-  NCnt++;
-}
-
-// Preprocess transition probabilities for each path t->v->x
 
 ///////////////////////////
 // TODO: Parallelization //
