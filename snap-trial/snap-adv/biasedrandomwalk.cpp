@@ -293,8 +293,8 @@ MPI_Win_flush(0, storageWindow);
   }
   
   for (int i = 0; i < selectedLen; i++) {
-    //PreprocessNodeParallel(InNet, ParamP, ParamQ, InNet->GetNI((selected)[i]));
-    PreprocessNode(InNet, ParamP, ParamQ, InNet->GetNI((selected)[i]), w, f, Selected);
+    PreprocessNodeParallel(InNet, ParamP, ParamQ, InNet->GetNI((selected)[i]));
+    //PreprocessNode(InNet, ParamP, ParamQ, InNet->GetNI((selected)[i]), w, f, Selected);
   }
 
     clock_t end = clock();
@@ -442,7 +442,7 @@ MPI_Win_flush(0, storageWindow);
   
   clock_t begin = clock();
   double begin_nat = omp_get_wtime();
-  
+ /* 
   THash<TInt, TBool> Selected;
   for(int i = 0; i < selectedLen; i++){
     Selected.AddKey(selected[i]);
@@ -466,14 +466,15 @@ for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
                                                   TFltV(CurrI.GetOutDeg())));
       }
     }
+    */
 
   long w = 0;
   bool f = false;
   
-  //for (int i = 0; i < selectedLen; i++) {
-  for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
-    //PreprocessNodeParallel(ProcNet, ParamP, ParamQ, ProcNet->GetNI(selected[i]));
-    PreprocessNode(ProcNet, ParamP, ParamQ, NI, w, f, Selected);
+  for (int i = 0; i < selectedLen; i++) {
+  //for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
+    PreprocessNodeParallel(ProcNet, ParamP, ParamQ, ProcNet->GetNI(selected[i]));
+    //PreprocessNode(ProcNet, ParamP, ParamQ, NI, w, f, Selected);
   }
 
     clock_t end = clock();
