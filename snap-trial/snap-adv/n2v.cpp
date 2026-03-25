@@ -58,6 +58,7 @@ void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
   
   begin = clock();
   begin_nat = omp_get_wtime();
+    /*
   for (int64 i = 0; i < NumWalks; i++) {
 
     // This function litteraly shuffles the nodes in the vector
@@ -86,6 +87,7 @@ void node2vec(PWNet& InNet, const double& ParamP, const double& ParamQ,
       WalksDone++;
     }
   }
+  */
   end = clock();
   end_nat = omp_get_wtime();
   _time = double(end-begin)/CLOCKS_PER_SEC;

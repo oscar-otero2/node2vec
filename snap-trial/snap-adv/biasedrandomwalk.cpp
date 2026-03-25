@@ -16,6 +16,12 @@ void AddEdgeNotDirected(PWNet &InNet, int64 SrcNId, int64 DstNId) {
 }
 
 int64 AliasDrawInt(TIntVFltVPr &NTTable, TRnd &Rnd);
+
+
+void PreprocessNode(PWNet &InNet, const double &ParamP, const double &ParamQ,
+                    TWNet::TNodeI NI, int64 &NCnt, const bool &Verbose
+                    ,THash<TInt, TBool> &Selected);
+
 void PreprocessNodeParallel(PWNet &InNet, const double &ParamP,
                             const double &ParamQ, TWNet::TNodeI NI);
 void PreprocessNodeAux(PWNet &InNet, const double &ParamP, const double &ParamQ,
@@ -48,7 +54,7 @@ THash<TInt, TBool> BFSStep(PWNet &InNet, THash<TInt, TBool> &HM,
   // them
   if (!OnlyOut) {
     // Copy of that one loop
-    for (THash<TInt, TBool>::TIter i = LastStep.BegI(); !i.IsEnd(); i.Next()) {
+    for (THash<TInt, TBool>::TIter i = Selected.BegI(); !i.IsEnd(); i.Next()) {
 
       TWNet::TNodeI CurrI = InNet->GetNI(i.GetKey());
 
@@ -105,6 +111,11 @@ THash<TInt, TBool> BFSStep(PWNet &InNet, THash<TInt, TBool> &HM,
 
         // printf("new nodes: %d\n", n);
       }
+
+    if (TotalEdges  >= ToBeSelectedEdges) {
+      break;
+    }
+
     }
 
     
@@ -114,6 +125,7 @@ THash<TInt, TBool> BFSStep(PWNet &InNet, THash<TInt, TBool> &HM,
   }
   return ThisStep;
 }
+
 
 void sendHM(TIntIntVFltVPrH &hash, int Proc) {
   // Firstly send total size
@@ -318,9 +330,40 @@ PWNet RecvChunk(int *SelectedLen, int **SelectedBuff, double ParamP,
   }
   // Return Selected in some incredible way
 
-  for (int i = 0; i < *SelectedLen; i++) {
-    PreprocessNodeParallel(ProcNet, ParamP, ParamQ,
-                           ProcNet->GetNI((*SelectedBuff)[i]));
+  // Build the selected hm
+  THash<TInt, TBool> Selected;
+  for(int i = 0; i < *SelectedLen; i++) {
+    Selected.AddKey((*SelectedBuff)[i]);
+  }
+  
+  // Now we need prealloc
+  // For each node in InNet
+    for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
+      ProcNet->SetNDat(NI.GetId(), TIntIntVFltVPrH());
+    }
+
+    // For each node in InNet
+    for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
+      // For all neighbours
+      for (int64 i = 0; i < NI.GetOutDeg();
+           i++) { // allocating space in advance to avoid issues with
+                  // multithreading
+        TWNet::TNodeI CurrI = ProcNet->GetNI(NI.GetNbrNId(i));
+        // Get node data (what is it)
+        // Add to it (as hashtable) (its id, a pair of an int vector and a float
+        // vector of the size of the out degree of the node)
+        CurrI.GetDat().AddDat(NI.GetId(),
+                              TPair<TIntV, TFltV>(TIntV(CurrI.GetOutDeg()),
+                                                  TFltV(CurrI.GetOutDeg())));
+      }
+    }
+  
+  //for (int i = 0; i < *SelectedLen; i++) {
+  long w = 0;
+  bool f = false;
+  for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
+    PreprocessNode(ProcNet, ParamP, ParamQ,
+                           NI, w, f, Selected);
   }
 
   free(EdgesBuff);
@@ -445,16 +488,6 @@ void DistributeGraph(PWNet &InNet, int NumProcs,
     // Only out edges until last iteration, when we'll get in and out ones
 
     while (Selected.Len() < ToBeSelected && !HM.Empty()) {
-    //  Make sure that all nodes are being visited still
-    //  Usual condition + safeguard to always finish sending
-    
-    // enough -> TotalEdges/2 > ToBeSelectedEdges || Selected.Len() > ToBeSelected
-    // not enoudh -> TotalEdges/2 < ToBeSelectedEdges && Selected.Len() < ToBeSelected
-    //while (
-    //  (((TotalEdges / 2) < ToBeSelectedEdges && Selected.Len() < ToBeSelected) && !HM.Empty()) 
-    //  || (i == NumProcs-1 && !HM.Empty())
-    //  ){
-    //while ((TotalEdges < ToBeSelectedEdges && !HM.Empty()) || (i == NumProcs-1 && !HM.Empty())){
 
       LastStep = BFSStep(InNet, HM, LastStep, Selected, Edges,
                          ToBeSelectedEdges - Edges.Len(), ToBeSelected - Selected.Len(), TotalEdges, true);
@@ -470,14 +503,6 @@ void DistributeGraph(PWNet &InNet, int NumProcs,
         LastStep.AddKey(NewKey);
 
       } else {
-      for (THash<TInt, TBool>::TIter j = LastStep.BegI(); !j.IsEnd();
-           j.Next()) {
-          // Already done inside searchfunction
-          /*
-        Selected.AddKey(j.GetKey());
-        HM.DelKey(j.GetKey());
-        */
-      }
       }
     }
 
@@ -675,7 +700,9 @@ int64 AliasDrawInt(TIntVFltVPr &NTTable, TRnd &Rnd) {
 // Because its end goal is to give us the probabilities of taking each edge
 // They are given in the node itself(?)
 void PreprocessNode(PWNet &InNet, const double &ParamP, const double &ParamQ,
-                    TWNet::TNodeI NI, int64 &NCnt, const bool &Verbose) {
+                    TWNet::TNodeI NI, int64 &NCnt, const bool &Verbose
+                    ,THash<TInt, TBool> &Selected
+                    ) {
   if (Verbose && NCnt % 100 == 0) {
     printf("\rPreprocessing progress: %.2lf%% ",
            (double)NCnt * 100 / (double)(InNet->GetNodes()));
@@ -690,6 +717,12 @@ void PreprocessNode(PWNet &InNet, const double &ParamP, const double &ParamQ,
   // For each neighbour
   for (int64 i = 0; i < NI.GetOutDeg(); i++) {
     TWNet::TNodeI CurrI = InNet->GetNI(NI.GetNbrNId(i)); // for each node v
+    
+    // Only write and process nodes that have been selected
+    if(!Selected.IsKey(CurrI.GetId())){
+      continue;
+    }
+
     double Psum = 0;
     TFltV PTable; // Probability distribution table
 
@@ -750,6 +783,9 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
       InNet->SetNDat(NI.GetId(), TIntIntVFltVPrH());
     }
 
+    clock_t begin = clock();
+    double begin_nat = omp_get_wtime();
+
     // For each node in InNet
     for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
       // For all neighbours
@@ -765,6 +801,14 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
                                                   TFltV(CurrI.GetOutDeg())));
       }
     }
+
+    clock_t end = clock();
+    double end_nat = omp_get_wtime();
+
+    double _time = double(end - begin) / CLOCKS_PER_SEC;
+    double _time_nat = end_nat - begin_nat;
+
+    printf("<prealloc process=\"%f\" natural=\"%f\" />", _time, _time_nat);
 
     int64 NCnt = 0;
     TIntV NIds;
@@ -802,8 +846,12 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
 
     // Try using Whole net
     // It shall work nice this way
+    long w = 0;
+    bool f = false;
     for (THash<TInt, TBool>::TIter i = SelectedRank0.BegI(); !i.IsEnd(); i++) {
-      PreprocessNodeParallel(InNet, ParamP, ParamQ, InNet->GetNI(i.GetKey()));
+    //for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
+      //PreprocessNodeParallel(InNet, ParamP, ParamQ, InNet->GetNI(i.GetKey()));
+      PreprocessNode(InNet, ParamP, ParamQ, InNet->GetNI(i.GetKey()), w, f, SelectedRank0);
     }
 
     end = clock();
@@ -827,22 +875,24 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
   if (rank == 0) {
     // Proc 0 isn't sending
 
-    clock_t begin = clock();
-    double begin_nat = omp_get_wtime();
 
     for (int i = 1; i < numprocs; i++) {
+      clock_t begin = clock();
+      double begin_nat = omp_get_wtime();
+
       RecvResult(InNet);
+
+      clock_t end = clock();
+      double end_nat = omp_get_wtime();
+
+      double _time = double(end - begin) / CLOCKS_PER_SEC;
+      double _time_nat = end_nat - begin_nat;
+
+      printf("<gather process=\"%f\" natural=\"%f\" />", _time, _time_nat);
     }
 
-    clock_t end = clock();
-    double end_nat = omp_get_wtime();
 
-    double _time = double(end - begin) / CLOCKS_PER_SEC;
-    double _time_nat = end_nat - begin_nat;
-
-    printf("<graph_processing process=\"%f\" natural=\"%f\" />", _time,
-           _time_nat);
-
+    /*
     for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
       int id = NI.GetId();
 
@@ -857,51 +907,12 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
         TFltV fltv = vect.GetVal2();
       }
     }
+    */
 
   } else {
     SendResult(ProcNet, SelectedLen, SelectedBuff, rank, 0);
   }
 }
-/*
-void PreprocessTransitionProbs(PWNet& InNet, const double& ParamP, const double&
-ParamQ, const bool& Verbose) {
-  // For each node in InNet
-  for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
-    InNet->SetNDat(NI.GetId(),TIntIntVFltVPrH());
-  }
-
-  // For each node in InNet
-  for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
-    // For all neighbours
-    for (int64 i = 0; i < NI.GetOutDeg(); i++) {                    //allocating
-space in advance to avoid issues with multithreading TWNet::TNodeI CurrI =
-InNet->GetNI(NI.GetNbrNId(i));
-      // Get node data (what is it)
-      // Add to it (as hashtable) (its id, a pair of an int vector and a float
-vector of the size of the out degree of the node)
-      CurrI.GetDat().AddDat(NI.GetId(),TPair<TIntV,TFltV>(TIntV(CurrI.GetOutDeg()),TFltV(CurrI.GetOutDeg())));
-    }
-  }
-
-  int64 NCnt = 0;
-  TIntV NIds;
-
-  // For each node in InNet get its id
-  for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
-    NIds.Add(NI.GetId());
-  }
-
-// This code is where computational weight falls, so this is to be parallelized
-#pragma omp parallel for schedule(dynamic)
-  // Preprocess all nodes in InNet
-  for (int64 i = 0; i < NIds.Len(); i++) {
-    // NCnt is mostly to be ignored as it only is used to display how much work
-has been done PreprocessNode(InNet, ParamP, ParamQ, InNet->GetNI(NIds[i]), NCnt,
-Verbose);
-  }
-  if(Verbose){ printf("\n"); }
-}
-*/
 
 int64 PredictMemoryRequirements(PWNet &InNet) {
   int64 MemNeeded = 0;
