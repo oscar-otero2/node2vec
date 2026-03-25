@@ -952,6 +952,9 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
       InNet->SetNDat(NI.GetId(), TIntIntVFltVPrH());
     }
 
+    clock_t begin = clock();
+    double begin_nat = omp_get_wtime();
+
     // For each node in InNet
     for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
       // For all neighbours
@@ -968,6 +971,13 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
       }
     }
 
+    clock_t end = clock();
+    double end_nat = omp_get_wtime();
+
+    double _time = double(end - begin) / CLOCKS_PER_SEC;
+    double _time_nat = end_nat - begin_nat;
+
+    printf("<prealloc process=\"%f\" natural=\"%f\" />", _time, _time_nat);
     int64 NCnt = 0;
     TIntV NIds;
 
@@ -1141,46 +1151,6 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
   } else {
   }
 }
-/*
-void PreprocessTransitionProbs(PWNet& InNet, const double& ParamP, const double&
-ParamQ, const bool& Verbose) {
-  // For each node in InNet
-  for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
-    InNet->SetNDat(NI.GetId(),TIntIntVFltVPrH());
-  }
-
-  // For each node in InNet
-  for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
-    // For all neighbours
-    for (int64 i = 0; i < NI.GetOutDeg(); i++) {                    //allocating
-space in advance to avoid issues with multithreading TWNet::TNodeI CurrI =
-InNet->GetNI(NI.GetNbrNId(i));
-      // Get node data (what is it)
-      // Add to it (as hashtable) (its id, a pair of an int vector and a float
-vector of the size of the out degree of the node)
-      CurrI.GetDat().AddDat(NI.GetId(),TPair<TIntV,TFltV>(TIntV(CurrI.GetOutDeg()),TFltV(CurrI.GetOutDeg())));
-    }
-  }
-
-  int64 NCnt = 0;
-  TIntV NIds;
-
-  // For each node in InNet get its id
-  for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
-    NIds.Add(NI.GetId());
-  }
-
-// This code is where computational weight falls, so this is to be parallelized
-#pragma omp parallel for schedule(dynamic)
-  // Preprocess all nodes in InNet
-  for (int64 i = 0; i < NIds.Len(); i++) {
-    // NCnt is mostly to be ignored as it only is used to display how much work
-has been done PreprocessNode(InNet, ParamP, ParamQ, InNet->GetNI(NIds[i]), NCnt,
-Verbose);
-  }
-  if(Verbose){ printf("\n"); }
-}
-*/
 
 int64 PredictMemoryRequirements(PWNet &InNet) {
   int64 MemNeeded = 0;
