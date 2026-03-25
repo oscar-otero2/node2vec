@@ -787,6 +787,7 @@ void pukeBuffer(z_stream& strm, Bytef* temp_out, std::vector<char>& decompressed
     } while (ret != Z_STREAM_END); // Keep going until zlib says the stream is done
 }
 
+/*
 void sendHM(TIntIntVFltVPrH &hash, int Proc) {
   TMOut streamDat;
   int streamDatLen;
@@ -923,6 +924,97 @@ void recvHM(TIntIntVFltVPrH &hash, int Proc) {
     hash.AddDat(key, dat);
   }
   free(compressed_data);
+}
+*/
+
+void sendHM(TIntIntVFltVPrH &hash, int Proc) {
+  // Firstly send total size
+  int Len = hash.Len();
+  MPI_Send(&Len, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
+
+  TMOut streamDat;
+  int streamDatLen;
+
+  TMOut streamKey;
+  int streamKeyLen;
+
+  for (THashKeyDatI<TInt, TIntVFltVPr> i = hash.BegI(); !i.IsEnd(); i++) {
+    TIntVFltVPr dat = i.GetDat();
+    TInt key = i.GetKey();
+
+    // Data sending
+    dat.Save(streamDat);
+    streamDatLen = streamDat.Len();
+
+    std::vector<char> bufferDat(streamDatLen);
+    memcpy(bufferDat.data(), streamDat.GetBfAddr(), streamDatLen);
+
+    MPI_Send(&streamDatLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
+    MPI_Send(bufferDat.data(), streamDatLen, MPI_BYTE, Proc, 0, MPI_COMM_WORLD);
+    // Data sent
+
+    // Key sending
+    key.Save(streamKey);
+    streamKeyLen = streamKey.Len();
+
+    std::vector<char> bufferKey(streamKeyLen);
+    memcpy(bufferKey.data(), streamKey.GetBfAddr(), streamKeyLen);
+
+    MPI_Send(&streamKeyLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
+    MPI_Send(bufferKey.data(), streamKeyLen, MPI_BYTE, Proc, 0, MPI_COMM_WORLD);
+    // Key sent
+
+    streamDat.Clr();
+    streamKey.Clr();
+  }
+}
+
+void recvHM(TIntIntVFltVPrH &hash, int Proc) {
+  // First recv total hash len
+  int Len;
+  MPI_Recv(&Len, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+  // Dat variables
+  char *DatBuf;
+  int DatLen;
+  int StreamDatLen;
+
+  // Key variables
+  char *KeyBuf;
+  int KeyLen;
+  int StreamKeyLen;
+
+  for (int i = 0; i < Len; i++) {
+
+    TIntVFltVPr dat;
+    TInt key;
+
+    // Recv data
+    MPI_Recv(&StreamDatLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD,
+             MPI_STATUS_IGNORE);
+    DatBuf = new char[StreamDatLen];
+    MPI_Recv(DatBuf, StreamDatLen, MPI_BYTE, Proc, 0, MPI_COMM_WORLD,
+             MPI_STATUS_IGNORE);
+
+    TMIn inDat(DatBuf, StreamDatLen, true);
+    dat.Load(inDat);
+    // free(DatBuf); NOT NEEDED
+    //  Recv data done
+
+    // Recv key
+    MPI_Recv(&StreamKeyLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD,
+             MPI_STATUS_IGNORE);
+    KeyBuf = new char[StreamKeyLen];
+    MPI_Recv(KeyBuf, StreamKeyLen, MPI_BYTE, Proc, 0, MPI_COMM_WORLD,
+             MPI_STATUS_IGNORE);
+
+    TMIn inKey(KeyBuf, StreamKeyLen, true);
+    key.Load(inKey);
+    // free(KeyBuf); // NOT NEEDED
+    //  Recv key done
+
+    hash.AddDat(key, dat);
+  }
 }
 
 
@@ -1434,6 +1526,9 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
       InNet->SetNDat(NI.GetId(), TIntIntVFltVPrH());
     }
 
+    clock_t begin = clock();
+    double begin_nat = omp_get_wtime();
+
     // For each node in InNet
     for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
       // For all neighbours
@@ -1449,6 +1544,14 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
                                                   TFltV(CurrI.GetOutDeg())));
       }
     }
+
+    clock_t end = clock();
+    double end_nat = omp_get_wtime();
+
+    double _time = double(end - begin) / CLOCKS_PER_SEC;
+    double _time_nat = end_nat - begin_nat;
+
+    printf("<prealloc process=\"%f\" natural=\"%f\" />", _time, _time_nat);
 
     int64 NCnt = 0;
     TIntV NIds;
