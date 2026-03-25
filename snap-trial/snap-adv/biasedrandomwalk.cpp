@@ -808,7 +808,7 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     double _time = double(end - begin) / CLOCKS_PER_SEC;
     double _time_nat = end_nat - begin_nat;
 
-    printf("<get_space process=\"%f\" natural=\"%f\" />", _time, _time_nat);
+    printf("<prealloc process=\"%f\" natural=\"%f\" />", _time, _time_nat);
 
     int64 NCnt = 0;
     TIntV NIds;
@@ -875,21 +875,22 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
   if (rank == 0) {
     // Proc 0 isn't sending
 
-    clock_t begin = clock();
-    double begin_nat = omp_get_wtime();
 
     for (int i = 1; i < numprocs; i++) {
+      clock_t begin = clock();
+      double begin_nat = omp_get_wtime();
+
       RecvResult(InNet);
+
+      clock_t end = clock();
+      double end_nat = omp_get_wtime();
+
+      double _time = double(end - begin) / CLOCKS_PER_SEC;
+      double _time_nat = end_nat - begin_nat;
+
+      printf("<gather process=\"%f\" natural=\"%f\" />", _time, _time_nat);
     }
 
-    clock_t end = clock();
-    double end_nat = omp_get_wtime();
-
-    double _time = double(end - begin) / CLOCKS_PER_SEC;
-    double _time_nat = end_nat - begin_nat;
-
-    printf("<graph_processing process=\"%f\" natural=\"%f\" />", _time,
-           _time_nat);
 
     /*
     for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
