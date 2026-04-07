@@ -268,7 +268,7 @@ MPI_Win_flush(0, storageWindow);
 
   MPI_Win_flush(0, storageWindow);
   MPI_Win_unlock(0, storageWindow);
-  MPI_Win_sync(storageWindow);
+  //MPI_Win_sync(storageWindow);
   
   if(storage == NULL) return 1; // This means we should try again No need to re-create the procNet
   
@@ -1284,7 +1284,9 @@ void DistributeGraph(PWNet &InNet, int NumProcs, int Blocks,
       globalStorageDisp = disp;
     } else {
       winStorages[i-1]->nextData = disp;
+      MPI_Win_lock(MPI_LOCK_EXCLUSIVE, 0, 0, storageWindow); 
       MPI_Win_sync(storageWindow);
+      MPI_Win_unlock(0, storageWindow);
     }
 
   }
@@ -1589,7 +1591,9 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
       MPI_Win_attach(procResultWindow, &initNode, sizeof(initNode));
 
       MPI_Get_address(&initNode, &(procResultDisp[i]));
+      MPI_Win_lock(MPI_LOCK_EXCLUSIVE, i, 0, procResultWindow);
       MPI_Win_sync(procResultWindow);
+      MPI_Win_unlock(i, procResultWindow);
     }
     MPI_Bcast(&(procResultDisp[i]), 1, MPI_AINT, 0, MPI_COMM_WORLD);
   }
