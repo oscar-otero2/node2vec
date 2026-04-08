@@ -359,12 +359,26 @@ PWNet RecvChunk(int *SelectedLen, int **SelectedBuff, double ParamP,
     }
   
   //for (int i = 0; i < *SelectedLen; i++) {
+  
+    clock_t begin = clock();
+    double begin_nat = omp_get_wtime();
+
+
+ 
   long w = 0;
   bool f = false;
   for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
     PreprocessNode(ProcNet, ParamP, ParamQ,
                            NI, w, f, Selected);
   }
+    clock_t end = clock();
+    double end_nat = omp_get_wtime();
+
+    double _time = double(end - begin) / CLOCKS_PER_SEC;
+    double _time_nat = end_nat - begin_nat;
+
+    printf("<process process=\"%f\" natural=\"%f\" />", _time, _time_nat);
+ 
 
   free(EdgesBuff);
   free(WeightsBuff);
