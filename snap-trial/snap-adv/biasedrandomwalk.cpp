@@ -218,7 +218,6 @@ void recvHM(TIntIntVFltVPrH &hash, int Proc) {
 }
 
 // Send graph pieces to different processes
-// TODO a little bit of memory management
 void SendChunk(THash<TInt, TBool> Selected,
                THash<TPair<TInt, TInt>, TFlt> Edges, int Proc) {
   // We should deserialize and we have to send both all edges and nodes to be
@@ -232,7 +231,6 @@ void SendChunk(THash<TInt, TBool> Selected,
 
   // Recv will create buffer to receive all nodes
 
-  // int SelectedBuff[SelectedLen];
   int *SelectedBuff = (int *)malloc(SelectedLen * sizeof(int));
   // Nasty loop
   int j = 0;
@@ -249,9 +247,6 @@ void SendChunk(THash<TInt, TBool> Selected,
 
   // Recv will create a buffer for all edges
   // We'll use two buffs, one for edge nodes, and the other for edge weights
-
-  // int EdgesBuff[EdgesLen*2];
-  // float WeightsBuff[EdgesLen];
 
   int *EdgesBuff = (int *)malloc(EdgesLen * 2 * sizeof(int));
   float *WeightsBuff = (float *)malloc(EdgesLen * sizeof(float));
@@ -275,10 +270,8 @@ void SendChunk(THash<TInt, TBool> Selected,
   free(WeightsBuff);
 }
 
-// Shall join these to work every way?
 // Mirror function to SendChunk. Will receive chunks of graph. Probs returns a
 // PWNet or TWNet
-// TODO a little bit of memory management
 PWNet RecvChunk(int *SelectedLen, int **SelectedBuff, double ParamP,
                 double ParamQ, int Proc) { // Proc is rank 0 in this case
 
@@ -296,13 +289,11 @@ PWNet RecvChunk(int *SelectedLen, int **SelectedBuff, double ParamP,
   MPI_Recv(&EdgesLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
   // Recv EdgesBuff
-  // int EdgesBuff[EdgesLen*2];
   int *EdgesBuff = (int *)malloc(EdgesLen * 2 * sizeof(int));
   MPI_Recv(EdgesBuff, EdgesLen * 2, MPI_INT, Proc, 0, MPI_COMM_WORLD,
            MPI_STATUS_IGNORE);
 
   // Recv WeightsBuff
-  // float WeightsBuff[EdgesLen];
   float *WeightsBuff = (float *)malloc(EdgesLen * sizeof(float));
   MPI_Recv(WeightsBuff, EdgesLen, MPI_FLOAT, Proc, 0, MPI_COMM_WORLD,
            MPI_STATUS_IGNORE);
@@ -358,7 +349,6 @@ PWNet RecvChunk(int *SelectedLen, int **SelectedBuff, double ParamP,
       }
     }
   
-  //for (int i = 0; i < *SelectedLen; i++) {
   long w = 0;
   bool f = false;
   for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
@@ -375,11 +365,8 @@ PWNet RecvChunk(int *SelectedLen, int **SelectedBuff, double ParamP,
 void SendResult(PWNet &ProcNet, int SelectedLen, int *SelectedBuff,
                 int SelfProc, int Proc) {
 
-  // int Lens[SelectedLen];
-  // int* Lens = (int*) malloc(SelectedLen*sizeof(int));
   char **SendBuff = (char **)malloc(SelectedLen * sizeof(char *));
 
-  // std::vector<std::vector<char>> buffers(SelectedLen);
   std::vector<int> Lens(SelectedLen);
 
   // Send data that will be needed
@@ -387,7 +374,6 @@ void SendResult(PWNet &ProcNet, int SelectedLen, int *SelectedBuff,
   MPI_Send(&SelectedLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
   MPI_Send(SelectedBuff, SelectedLen, MPI_INT, Proc, 0, MPI_COMM_WORLD);
   for (int i = 0; i < SelectedLen; ++i) {
-    // TMOut stream;
     TIntIntVFltVPrH hash = ProcNet->GetNDat(SelectedBuff[i]);
     sendHM(hash, Proc);
   }
@@ -429,21 +415,11 @@ void RecvResult(PWNet &InNet) {
 }
 
 // Distribution of graph between procs
-// GIVES ERRORS WITH 1 RANK ONLY
 void DistributeGraph(PWNet &InNet, int NumProcs,
                      THash<TInt, TBool> &SelectedRank0, PWNet &ProcNet0) {
 
   int NumNodes = InNet->GetNodes();
   int NumEdges = InNet->GetEdges();
-  // NUMPROCS-1 BECAUSE WE WON'T USE RANK 0 FOR PROCESSING (WE SHOULD)
-
-  /*
-  if(NumProcs == 1){
-    for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
-      PreprocessNodeParallel(InNet, 1.0, 1.0, InNet->GetNI(NI.GetId()));
-    }
-  }
-  */
 
   int ToBeSelected = (NumNodes / (NumProcs)) + 1; // Por si van de menos
   int ToBeSelectedEdges = (NumEdges / (NumProcs)) + 1;
@@ -456,15 +432,9 @@ void DistributeGraph(PWNet &InNet, int NumProcs,
     HM.AddKey(NI.GetId());
   }
 
-  // GetRndKeyId (TRnd &Rnd) const
 
   TRnd rand = TRnd();
-  // TODO Check about sending this data to rank 0. Maybe do it in another way?
-  // i = 1 BECAUSE IN THIS PROOF OF CONCEPT WE WON'T BE USING RANK 0 FOR
-  // PROCESSING PROBLEMS WITH ONLY 2 PROCESSES TOO
-  for (int i = 0; i < NumProcs; i++) { // Get key TODO (from random node in HM)
-    // This sampling is faulty
-    // TWNet::TNodeI Rand = InNet->GetRndNI(rand);
+  for (int i = 0; i < NumProcs; i++) {
     int TotalEdges = 0;
 
     THash<TInt, TBool> Selected;
@@ -493,9 +463,6 @@ void DistributeGraph(PWNet &InNet, int NumProcs,
                          ToBeSelectedEdges - Edges.Len(), ToBeSelected - Selected.Len(), TotalEdges, true);
       if (LastStep.Empty()) {
 
-        // This method is scarily biased, but random sampling of the hash is
-        // faulty as it returns nonexistant ids over and over (0)
-        
         int NewKey = HM.GetKey(HM.GetRndKeyId(rand));
         Selected.AddKey(NewKey);
         TotalEdges += InNet->GetNI(NewKey).GetDeg();
@@ -542,24 +509,19 @@ void DistributeGraph(PWNet &InNet, int NumProcs,
       SendChunk(Selected, Edges, i+1);
     }
 
-    // SendChunk(Selected, Edges, i);
   }
 }
 
 void PreprocessNodeParallel(PWNet &InNet, const double &ParamP,
                             const double &ParamQ, TWNet::TNodeI NI) {
 
-  // TODO !!!
-  // Maybe initializing the graph would be great I guess. This is probably
-  // helping a lot with the overhead, So I should probably just be creating the
-  // data for those nodes that have been assigned the v
 
   InNet->SetNDat(NI.GetId(), TIntIntVFltVPrH());
 
   // Allocate the necessary space in the hashtable (only for the node to be
   // calc'd)
   // With this horrifying fix that gets full deg, the code now works on cluster
-  // environment wtf
+  // environment wtf (switched getindeg to full deg)
   for (int64 i = 0; i < NI.GetDeg();
        i++) { // allocating space in advance to avoid issues with multithreading
     TWNet::TNodeI CurrI = InNet->GetNI(NI.GetNbrNId(i));
@@ -762,9 +724,9 @@ void PreprocessNode(PWNet &InNet, const double &ParamP, const double &ParamQ,
 
 // Preprocess transition probabilities for each path t->v->x
 
-///////////////////////////
-// TODO: Parallelization //
-///////////////////////////
+///////////////////////
+// Starting function //
+///////////////////////
 
 void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
                                const double &ParamQ, const bool &verbose) {
@@ -819,7 +781,6 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     }
   }
 
-  // My own process
 
   int SelectedLen;
   int *SelectedBuff;
@@ -849,8 +810,6 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     long w = 0;
     bool f = false;
     for (THash<TInt, TBool>::TIter i = SelectedRank0.BegI(); !i.IsEnd(); i++) {
-    //for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
-      //PreprocessNodeParallel(InNet, ParamP, ParamQ, InNet->GetNI(i.GetKey()));
       PreprocessNode(InNet, ParamP, ParamQ, InNet->GetNI(i.GetKey()), w, f, SelectedRank0);
     }
 
@@ -871,7 +830,6 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     // But we still need to have Selected nodes in mind to do so
   }
 
-  // Gathering seems functional
   if (rank == 0) {
     // Proc 0 isn't sending
 
@@ -891,23 +849,6 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
       printf("<gather process=\"%f\" natural=\"%f\" />", _time, _time_nat);
     }
 
-
-    /*
-    for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
-      int id = NI.GetId();
-
-      TIntIntVFltVPrH data = InNet->GetNDat(id);
-      if (data.Empty())
-        printf("Something wrong\n"); // Better to throw some error
-
-      for (THash<TInt, TIntVFltVPr>::TIter i = data.BegI(); !i.IsEnd();
-           i.Next()) {
-        TIntVFltVPr vect = data.GetDat(i.GetKey());
-        TIntV intv = vect.GetVal1();
-        TFltV fltv = vect.GetVal2();
-      }
-    }
-    */
 
   } else {
     SendResult(ProcNet, SelectedLen, SelectedBuff, rank, 0);
