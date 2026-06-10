@@ -77,7 +77,6 @@ bool ProcsFinished(ProcStatus& Status){
 }
 
 
-// Maybe change i parameter's name?
 void StoreChunk(const THash<TInt, TBool>& Selected, const THash<TPair<TInt, TInt>, TFlt>& Edges, Storage* Stored, int index){
   int SelectedLen = Selected.Len();
   Stored[index].selectedLen = SelectedLen;
@@ -164,14 +163,12 @@ THash<TInt, TBool> BFSStep(PWNet &InNet, THash<TInt, TBool> &HM,
                            THash<TInt, TBool> &Selected,
                            THash<TPair<TInt, TInt>, TFlt> &Edges,
                            int ToBeSelectedEdges, int ToBeSelected, int& TotalEdges, bool OnlyOut) {
-  // Iterate over HM (probs won't work)
 
   THash<TInt, TBool> ThisStep;
 
   // On last It Add all edges, but nodes are not to be selected, just return
   // them
   if (!OnlyOut) {
-    // Copy of that one loop
     for (THash<TInt, TBool>::TIter i = Selected.BegI(); !i.IsEnd(); i.Next()) {
 
       TWNet::TNodeI CurrI = InNet->GetNI(i.GetKey());
@@ -226,8 +223,6 @@ THash<TInt, TBool> BFSStep(PWNet &InNet, THash<TInt, TBool> &HM,
 
         Edges.AddDat(TPair<TInt, TInt>(v, n), InNet->GetEDat(v, n));
         // Add these edges too
-
-        // printf("new nodes: %d\n", n);
       }
 
     if (TotalEdges  >= ToBeSelectedEdges) {
@@ -309,7 +304,6 @@ void recvHM(TIntIntVFltVPrH &hash, int Proc) {
     // Recv data
     MPI_Recv(&StreamDatLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD,
              MPI_STATUS_IGNORE);
-    //DatBuf = (char *)malloc(StreamDatLen);
     DatBuf = new char[StreamDatLen];
     MPI_Recv(DatBuf, StreamDatLen, MPI_BYTE, Proc, 0, MPI_COMM_WORLD,
              MPI_STATUS_IGNORE);
@@ -322,7 +316,6 @@ void recvHM(TIntIntVFltVPrH &hash, int Proc) {
     // Recv key
     MPI_Recv(&StreamKeyLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD,
              MPI_STATUS_IGNORE);
-    //KeyBuf = (char *)malloc(StreamKeyLen);
     KeyBuf = new char[StreamKeyLen];
     MPI_Recv(KeyBuf, StreamKeyLen, MPI_BYTE, Proc, 0, MPI_COMM_WORLD,
              MPI_STATUS_IGNORE);
@@ -337,7 +330,6 @@ void recvHM(TIntIntVFltVPrH &hash, int Proc) {
 }
 
 // Send graph pieces to different processes
-// TODO a little bit of memory management
 void SendChunk(THash<TInt, TBool> Selected,
                THash<TPair<TInt, TInt>, TFlt> Edges, ProcStatus& Status, int Proc) {
   
@@ -430,10 +422,8 @@ void SendChunk(Storage& Stored, ProcStatus& Status, int Proc) {
 
 void SendResult(PWNet &ProcNet, int SelectedLen, int *SelectedBuff,
                 int SelfProc, int Proc);
-// Shall join these to work every way?
 // Mirror function to SendChunk. Will receive chunks of graph. Probs returns a
 // PWNet or TWNet
-// TODO a little bit of memory management
 void RecvChunk(double ParamP,
                 double ParamQ, int SelfProc, int Proc) { // Proc is rank 0 in this case
 
@@ -452,7 +442,6 @@ void RecvChunk(double ParamP,
   MPI_Recv(&EdgesLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
   // Recv EdgesBuff
-  // int EdgesBuff[EdgesLen*2];
   int *EdgesBuff = (int *)malloc(EdgesLen * sizeof(int));
   MPI_Recv(EdgesBuff, EdgesLen, MPI_INT, Proc, 0, MPI_COMM_WORLD,
            MPI_STATUS_IGNORE);
@@ -461,7 +450,6 @@ void RecvChunk(double ParamP,
   int WeightsLen;
   MPI_Recv(&WeightsLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
   // Recv WeightsBuff
-  // float WeightsBuff[EdgesLen];
   float *WeightsBuff = (float *)malloc(WeightsLen * sizeof(float));
   MPI_Recv(WeightsBuff, WeightsLen, MPI_FLOAT, Proc, 0, MPI_COMM_WORLD,
            MPI_STATUS_IGNORE);
@@ -473,7 +461,6 @@ void RecvChunk(double ParamP,
   // Create this network
   PWNet ProcNet = PWNet::New();
 
-  // DANGER
   for (int i = 0; i < EdgesLen / 2; i++) {
     int node1, node2;
     node1 = EdgesBuff[i * 2];
@@ -493,40 +480,13 @@ void RecvChunk(double ParamP,
   clock_t begin = clock();
     double begin_nat = omp_get_wtime();
 
-  // Reserve mem
-  // For each node in InNet
-  /*
-    for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
-      // For all neighbours
-      for (int64 i = 0; i < NI.GetOutDeg();
-           i++) { // allocating space in advance to avoid issues with
-                  // multithreading
-        TWNet::TNodeI CurrI = ProcNet->GetNI(NI.GetNbrNId(i));
-        // Get node data (what is it)
-        // Add to it (as hashtable) (its id, a pair of an int vector and a float
-        // vector of the size of the out degree of the node)
-        CurrI.GetDat().AddDat(NI.GetId(),
-                              TPair<TIntV, TFltV>(TIntV(CurrI.GetOutDeg()),
-                                                  TFltV(CurrI.GetOutDeg())));
-      }
-    }
-    */
-
   long w = 0;
   bool f = false;
   
-  /*
-  THash<TInt, TBool> Selected;
-  for (int i = 0; i < SelectedLen; i++) {
-    Selected.AddKey(SelectedBuff[i]);
-  }
-  */
 
-  //for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
   for (int i = 0; i < SelectedLen; i++) {
     PreprocessNodeParallel(ProcNet, ParamP, ParamQ,
                            ProcNet->GetNI((SelectedBuff)[i]));
-    //PreprocessNode(ProcNet, ParamP, ParamQ, NI, w, f, Selected);
   }
 
     clock_t end = clock();
@@ -551,17 +511,13 @@ void SendResult(PWNet &ProcNet, int SelectedLen, int *SelectedBuff,
                 int SelfProc, int Proc) {
 
   MPI_Send(&SelfProc, 1, MPI_INT, Proc, REQUEST, MPI_COMM_WORLD);
-  // int Lens[SelectedLen];
-  // int* Lens = (int*) malloc(SelectedLen*sizeof(int));
 
-  // std::vector<std::vector<char>> buffers(SelectedLen);
   std::vector<int> Lens(SelectedLen);
 
   // Send data that will be needed
   MPI_Send(&SelectedLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
   MPI_Send(SelectedBuff, SelectedLen, MPI_INT, Proc, 0, MPI_COMM_WORLD);
   for (int i = 0; i < SelectedLen; ++i) {
-    // TMOut stream;
     TIntIntVFltVPrH hash = ProcNet->GetNDat(SelectedBuff[i]);
     sendHM(hash, Proc);
   }
@@ -618,21 +574,12 @@ int RecvResult(PWNet &InNet, ProcStatus& Status, int Proc) {
 }
 
 // Distribution of graph between procs
-// GIVES ERRORS WITH 1 RANK ONLY
 void DistributeGraph(PWNet &InNet, int NumProcs, int Blocks, Storage* Stored, ProcStatus& Status,
                      THash<TInt, TBool> &SelectedRank0, PWNet &ProcNet0) {
 
   int NumNodes = InNet->GetNodes();
   int NumEdges = InNet->GetEdges();
-  // NUMPROCS-1 BECAUSE WE WON'T USE RANK 0 FOR PROCESSING (WE SHOULD)
 
-  /*
-  if(NumProcs == 1){
-    for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
-      PreprocessNodeParallel(InNet, 1.0, 1.0, InNet->GetNI(NI.GetId()));
-    }
-  }
-  */
 
   // Distribute in more blocks than procs
   int ToBeSelected = (NumNodes / (Blocks)) + 1; // Por si van de menos
@@ -646,14 +593,10 @@ void DistributeGraph(PWNet &InNet, int NumProcs, int Blocks, Storage* Stored, Pr
     HM.AddKey(NI.GetId());
   }
 
-  // GetRndKeyId (TRnd &Rnd) const
-
   TRnd rand = TRnd();
   
   // Distribute the graph in some qty of blocks
-  for (int i = 0; i < Blocks; i++) { // Get key TODO (from random node in HM)
-    // This sampling is faulty
-    // TWNet::TNodeI Rand = InNet->GetRndNI(rand);
+  for (int i = 0; i < Blocks; i++) { 
     int TotalEdges = 0;
 
     THash<TInt, TBool> Selected;
@@ -663,9 +606,6 @@ void DistributeGraph(PWNet &InNet, int NumProcs, int Blocks, Storage* Stored, Pr
 
     // Now this doesn't break but is very strange
     if (HM.Empty()) {
-      // TODO: This can be breaking things
-      
-      //SendChunk(Selected, Edges, i);
       // Horrifying once again
       continue;
     }
@@ -677,26 +617,12 @@ void DistributeGraph(PWNet &InNet, int NumProcs, int Blocks, Storage* Stored, Pr
     HM.DelKey(Rand);
 
     // Only out edges until last iteration, when we'll get in and out ones
-
-    //while (Selected.Len() < ToBeSelected && !HM.Empty()) {
-    //  Make sure that all nodes are being visited still
-    //  Usual condition + safeguard to always finish sending
-    
-    // enough -> TotalEdges/2 > ToBeSelectedEdges || Selected.Len() > ToBeSelected
-    // not enoudh -> TotalEdges/2 < ToBeSelectedEdges && Selected.Len() < ToBeSelected
-    //while (
-    //  (((TotalEdges / 2) < ToBeSelectedEdges && Selected.Len() < ToBeSelected) && !HM.Empty()) 
-    //  || (i == NumProcs-1 && !HM.Empty())
-    //  ){
     while ((TotalEdges / 2 < ToBeSelectedEdges && !HM.Empty()) || (i == Blocks-1 && !HM.Empty())){
 
       LastStep = BFSStep(InNet, HM, LastStep, Selected, Edges,
                          ToBeSelectedEdges - Edges.Len(), ToBeSelected - Selected.Len(), TotalEdges, true);
       if (LastStep.Empty()) {
 
-        // This method is scarily biased, but random sampling of the hash is
-        // faulty as it returns nonexistant ids over and over (0)
-        
         int NewKey = HM.GetKey(HM.GetRndKeyId(rand));
         Selected.AddKey(NewKey);
         TotalEdges += InNet->GetNI(NewKey).GetDeg();
@@ -784,7 +710,6 @@ void DistributeGraph(PWNet &InNet, int NumProcs, int Blocks, Storage* Stored, Pr
 void PreprocessNodeParallel(PWNet &InNet, const double &ParamP,
                             const double &ParamQ, TWNet::TNodeI NI) {
 
-  // TODO !!!
   // Maybe initializing the graph would be great I guess. This is probably
   // helping a lot with the overhead, So I should probably just be creating the
   // data for those nodes that have been assigned the v
@@ -794,7 +719,7 @@ void PreprocessNodeParallel(PWNet &InNet, const double &ParamP,
   // Allocate the necessary space in the hashtable (only for the node to be
   // calc'd)
   // With this horrifying fix that gets full deg, the code now works on cluster
-  // environment wtf
+  // environment wtf (switched from getindeg to full deg)
   for (int64 i = 0; i < NI.GetDeg();
        i++) { // allocating space in advance to avoid issues with multithreading
     TWNet::TNodeI CurrI = InNet->GetNI(NI.GetNbrNId(i));
@@ -930,9 +855,9 @@ int64 AliasDrawInt(TIntVFltVPr &NTTable, TRnd &Rnd) {
   return Y < NTTable.GetVal2()[X] ? X : NTTable.GetVal1()[X];
 }
 
-///////////////////////////
-// TODO: Parallelization //
-///////////////////////////
+///////////////////////
+// Starting function //
+///////////////////////
 
 void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
                                const double &ParamQ, const int& Blocks, const bool &verbose) {
@@ -986,8 +911,6 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
       NIds.Add(NI.GetId());
     }
   }
-
-  // My own process
 
   int SelectedLen;
   int *SelectedBuff;
@@ -1085,9 +1008,6 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
 
   } else {
     
-    // TODO, VERY BIG TODO
-    // THIS WILL PROBABLY GET STUCK AS IT HAS TO BE SENT AT LEAST ONE CHUNK
-
     // Be careful and wait for a dismiss too
     // Probe message on request -> Dismiss
     // Probe message on tag 0 -> SendChunk
@@ -1108,10 +1028,6 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
       RecvChunk(ParamP, ParamQ, rank, 0);
 
     
-      // Send result, which also send the request first
-      //SendResult(ProcNet, SelectedLen, SelectedBuff, rank, 0);
-      //free(SelectedBuff);
-
       // Recv request's result
       int isSending;
       MPI_Recv(&isSending, 1, MPI_INT, 0, REQUEST, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -1127,29 +1043,6 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     // But we still need to have Selected nodes in mind to do so
   }
 
-  // Gathering seems functional
-  if (rank == 0) {
-    // Proc 0 isn't sending
-
-    /*
-    for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
-      int id = NI.GetId();
-
-      TIntIntVFltVPrH data = InNet->GetNDat(id);
-      if (data.Empty())
-        printf("Something wrong\n"); // Better to throw some error
-
-      for (THash<TInt, TIntVFltVPr>::TIter i = data.BegI(); !i.IsEnd();
-           i.Next()) {
-        TIntVFltVPr vect = data.GetDat(i.GetKey());
-        TIntV intv = vect.GetVal1();
-        TFltV fltv = vect.GetVal2();
-      }
-    }
-    */
-
-  } else {
-  }
 }
 
 int64 PredictMemoryRequirements(PWNet &InNet) {
