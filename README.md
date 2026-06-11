@@ -17,3 +17,7 @@ Rama parallel-v4, esquema maestro esclavo con una distribución en bloques basad
 ---
 
 Para todos estos ejemplos, la compilación se puede llevar a cabo dirigiéndose al directorio snap-trial y ejecutando `make`. Esto compilará la librería (Snap.o) y el ejecutable de node2vec (node2vec), dentro del directorio `snap-trial/examples/node2vec/`. En ese directorio se encuentra, en el Readme, el comando que se puede ejecutar para compilar node2vec sin necesidad de recompilar la librería (Snap.o).
+
+---
+
+Nota importante -> Por la realización de las pruebas, la fase de caminado está comentada, en el fichero `/snap-trial/snap-adv/n2v.cpp`. Esto provoca que, sin descomentarla, los resultados no sean correctos.
