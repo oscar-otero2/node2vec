@@ -20,7 +20,7 @@ all: $(MAIN)
 #
 
 $(MAIN): $(MAIN).cpp $(DEPH) $(DEPCPP) $(EXSNAP)/Snap.o 
-	mpiCC $(CXXFLAGS) -o $(MAIN) $(MAIN).cpp $(DEPCPP) $(EXSNAP)/Snap.o -I$(EXSNAP) -I$(EXSNAPADV) -I$(EXGLIB) $(LDFLAGS) $(LIBS)
+	mpiCC $(CXXFLAGS) -o $(MAIN) $(MAIN).cpp $(DEPCPP) $(EXSNAP)/Snap.o -I$(EXSNAP) -I$(EXSNAPADV) -I$(EXGLIB) $(LDFLAGS) $(LIBS) -lz
 	cp $(MAIN) ../Release
 
 #
