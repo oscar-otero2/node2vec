@@ -220,7 +220,6 @@ MPI_Win_flush(0, storageWindow);
       storage = (WinStorage*) malloc(vals[0]);
     //printf("\ngetFirst 2 Get where storage: %p\nvals0: %ld\ndisp: %p\n\n", storage, vals[0], disp);
     fflush(stdout);
-      // TODO: Fix this Get
       MPI_Get(storage,
               vals[0],
               MPI_BYTE,
@@ -294,7 +293,6 @@ MPI_Win_flush(0, storageWindow);
   
   for (int i = 0; i < selectedLen; i++) {
     PreprocessNodeParallel(InNet, ParamP, ParamQ, InNet->GetNI((selected)[i]));
-    //PreprocessNode(InNet, ParamP, ParamQ, InNet->GetNI((selected)[i]), w, f, Selected);
   }
 
     clock_t end = clock();
@@ -406,20 +404,17 @@ MPI_Win_flush(0, storageWindow);
   fflush(stdout);
   // Existing variable
   int selectedLen = storage->selectedLen;
-  // TODO: IS THIS BULLSHIT?
   ProcSelectedLen[index] = selectedLen;
 
 
   int* edges = (int*)(storage+1);
   float* weights = (float*)(edges + edgesLen);
   int* selected = (int*)(weights + weightsLen);
-  // TODO: I'm dumb mempcy does not alloc
   ProcSelectedBuff[index] = (int*)malloc(sizeof(int) * selectedLen);
   memcpy(ProcSelectedBuff[index], selected, selectedLen * sizeof(int));
   
   printf("Danger done\n");
   fflush(stdout);
-  //PWNet ProcNet = PWNet::New();
 
   for (int i = 0; i <  weightsLen; i++) {
     int node1, node2;
@@ -442,39 +437,12 @@ MPI_Win_flush(0, storageWindow);
   
   clock_t begin = clock();
   double begin_nat = omp_get_wtime();
- /* 
-  THash<TInt, TBool> Selected;
-  for(int i = 0; i < selectedLen; i++){
-    Selected.AddKey(selected[i]);
-  }
-  
-  // Only alloc for newly alloc'd (the only we're writing into right?)
-for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
-      // For all neighbours
-      for (int64 i = 0; i < NI.GetOutDeg();
-           i++) { // allocating space in advance to avoid issues with
-                  // multithreading
-        TWNet::TNodeI CurrI = ProcNet->GetNI(NI.GetNbrNId(i));
-        if(!Selected.IsKey(CurrI.GetId())){
-          continue;
-        }
-        // Get node data (what is it)
-        // Add to it (as hashtable) (its id, a pair of an int vector and a float
-        // vector of the size of the out degree of the node)
-        CurrI.GetDat().AddDat(NI.GetId(),
-                              TPair<TIntV, TFltV>(TIntV(CurrI.GetOutDeg()),
-                                                  TFltV(CurrI.GetOutDeg())));
-      }
-    }
-    */
 
   long w = 0;
   bool f = false;
   
   for (int i = 0; i < selectedLen; i++) {
-  //for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
     PreprocessNodeParallel(ProcNet, ParamP, ParamQ, ProcNet->GetNI(selected[i]));
-    //PreprocessNode(ProcNet, ParamP, ParamQ, NI, w, f, Selected);
   }
 
     clock_t end = clock();
@@ -486,15 +454,6 @@ for (TWNet::TNodeI NI = ProcNet->BegNI(); NI < ProcNet->EndNI(); NI++) {
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   printf("<proc rank=\"%d\" process=\"%f\" natural=\"%f\" />\n", rank, _time, _time_nat);
-
-  // This should be done at last only
-  /*
-  putSelectedResults(ProcNet, storageWindow, resultWindow, disp, dispResult, selectedLen, selected);
-
-  printf("Put again\n");
-  fflush(stdout);
-  */
-  //putSelectedResultsList(ProcNet, initNode, storageWindow, procResultWindow, selectedLen, selected);
 
   if(storage != NULL){
     free(storage);
@@ -574,7 +533,6 @@ HMProcStorage* allocHMProcStorage(const TIntIntVFltVPrH& hash,  const int& nodeI
   }
 
 
-  // --- PART 2: Serialize everything into one local buffer ---
   char* bigBuffer = (char*)malloc(totalBufferSize);
   char* ptr = bigBuffer;
 
@@ -612,7 +570,6 @@ HMProcStorage* allocHMProcStorage(const TIntIntVFltVPrH& hash,  const int& nodeI
 
 
 void putSelectedResults(const PWNet& ProcNet, MPI_Win storageWindow, MPI_Win resultWindow, MPI_Aint disp, MPI_Aint dispResult, int selectedLen, int* selectedBuff) {
-  // --- PART 1: Calculate Total Required Size for ALL nodes ---
   size_t totalBufferSize = 0;
   for (int i = 0; i < selectedLen; ++i) {
     int nodeId = selectedBuff[i];
@@ -634,7 +591,6 @@ void putSelectedResults(const PWNet& ProcNet, MPI_Win storageWindow, MPI_Win res
 
   totalBufferSize = (totalBufferSize + 7) & ~7;
 
-  // --- PART 2: Serialize everything into one local buffer ---
   char* bigBuffer = (char*)malloc(totalBufferSize);
   char* ptr = bigBuffer;
 
@@ -643,7 +599,7 @@ void putSelectedResults(const PWNet& ProcNet, MPI_Win storageWindow, MPI_Win res
     TIntIntVFltVPrH hash = ProcNet->GetNDat(nodeId);
     int numEntries = hash.Len();
 
-    // Temporarily save position to write node-specific totalSize later
+    // Temporarily save position to write totalSize
     char* nodeSizePtr = ptr; 
     ptr += sizeof(TInt); // Skip totalSize for now
     *((TInt*)ptr) = nodeId;     ptr += sizeof(TInt);
@@ -671,7 +627,6 @@ void putSelectedResults(const PWNet& ProcNet, MPI_Win storageWindow, MPI_Win res
     *((TInt*)nodeSizePtr) = (TInt)(ptr - nodeSizePtr);
   }
 
-  // --- PART 3: Single Remote Memory Access ---
   MPI_Win_lock(MPI_LOCK_EXCLUSIVE, 0, 0, resultWindow);
 
   MPI_Aint currOffset;
@@ -687,14 +642,13 @@ void putSelectedResults(const PWNet& ProcNet, MPI_Win storageWindow, MPI_Win res
   MPI_Aint nextOffset = currOffset + totalBufferSize;
   MPI_Put(&nextOffset, 1, MPI_AINT, 0, dispResult, 1, MPI_AINT, resultWindow);
   
-  // Single write of all data to: Base Address + Reserved Offset
+  // Single write of all data to base address + offset
   //printf("Secont Put in:\naddress: %p\nsize: %p\n", dispResult + currOffset, totalBufferSize);
   fflush(stdout);
   MPI_Put(bigBuffer, totalBufferSize, MPI_BYTE, 0, dispResult + currOffset, totalBufferSize, MPI_BYTE, resultWindow);
   
   MPI_Win_unlock(0, resultWindow);
 
-  // --- PART 4: Update Block Status ---
   MPI_Win_lock(MPI_LOCK_SHARED, 0, 0, storageWindow);
   MPI_Aint status = DATA_STATUS_SENT;
   //printf("Third Put\n");
@@ -787,145 +741,6 @@ void pukeBuffer(z_stream& strm, Bytef* temp_out, std::vector<char>& decompressed
     } while (ret != Z_STREAM_END); // Keep going until zlib says the stream is done
 }
 
-/*
-void sendHM(TIntIntVFltVPrH &hash, int Proc) {
-  TMOut streamDat;
-  int streamDatLen;
-
-  TMOut streamKey;
-  int streamKeyLen;
-  
-  // Send ->
-  // Amount of entries:
-  // Key, datLen, dataBuffer
-  
-  // Setup zlib stream
-  z_stream strm;
-  std::memset(&strm, 0, sizeof(strm));
-
-  // TODO: Check higher compression level
-  if(deflateInit(&strm, Z_DEFAULT_COMPRESSION) != Z_OK) {
-  //if(deflateInit(&strm, 9) != Z_OK) {
-    printf("ERROR ON ZLIB!\n");
-    exit(-1);
-  }
-  
-  std::vector<Bytef> compressed_data;
-  const size_t CHUNK_SIZE = 4092; // TODO i dont know how this will impact
-  Bytef temp_out[CHUNK_SIZE];
-  
-  // begin by length
-  int len = hash.Len();
-  
-  strm.next_in = reinterpret_cast<Bytef*>(&len);
-  strm.avail_in = sizeof(int);
-  int flush = Z_NO_FLUSH;
-  consumeBuffer(strm, temp_out, compressed_data, CHUNK_SIZE, flush);
-  
-
-  for (THashKeyDatI<TInt, TIntVFltVPr> i = hash.BegI(); !i.IsEnd(); i++) {
-    TIntVFltVPr dat = i.GetDat();
-    TInt key = i.GetKey();
-
-    // Data sending
-    dat.Save(streamDat);
-    streamDatLen = streamDat.Len();
-
-    // Key sending
-    key.Save(streamKey);
-    streamKeyLen = streamKey.Len();
-
-    strm.next_in = reinterpret_cast<Bytef*>(&key);
-    strm.avail_in = sizeof(TInt);
-    consumeBuffer(strm, temp_out,
-     compressed_data, CHUNK_SIZE, Z_NO_FLUSH);
-
-    strm.next_in = reinterpret_cast<Bytef*>(&streamDatLen);
-    strm.avail_in = sizeof(TInt);
-    consumeBuffer(strm, temp_out,
-     compressed_data, CHUNK_SIZE, Z_NO_FLUSH);
-    
-    strm.next_in = reinterpret_cast<Bytef*>(streamDat.GetBfAddr());
-    strm.avail_in = streamDatLen;
-    consumeBuffer(strm, temp_out,
-     compressed_data, CHUNK_SIZE, Z_NO_FLUSH);
-
-    streamDat.Clr();
-    streamKey.Clr();
-  }
-  
-    // Finish this buffer
-    strm.avail_in = 0;
-    consumeBuffer(strm, temp_out,
-     compressed_data, CHUNK_SIZE, Z_FINISH);
-  
-    deflateEnd(&strm);
-    int data_len = compressed_data.size();
-    MPI_Send(&data_len, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
-    MPI_Send(compressed_data.data(), data_len, MPI_BYTE, Proc, 0, MPI_COMM_WORLD);
-  
-}
-
-void recvHM(TIntIntVFltVPrH &hash, int Proc) {
-  // First recv total hash len
-  int data_len;
-  MPI_Recv(&data_len, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-  Bytef* compressed_data = (Bytef*)malloc(data_len * sizeof(Bytef));
-  MPI_Recv(compressed_data, data_len, MPI_BYTE, Proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-  
-  z_stream strm;
-  std::memset(&strm, 0, sizeof(strm));
-
-  if(inflateInit(&strm) != Z_OK) {
-    printf("ERROR ON DECOMPRESSION\n");
-    exit(-1);
-  }
-  
-  strm.next_in = const_cast<Bytef*>(compressed_data);
-  strm.avail_in = data_len;
-  
-  std::vector<char> decompressed_data;
-  const size_t CHUNK_SIZE = 4092;
-  Bytef temp_out[CHUNK_SIZE];
-
-  pukeBuffer(strm, temp_out, decompressed_data, CHUNK_SIZE);
-  
-  inflateEnd(&strm);
-  
-  // Data is:
-  // Entries,
-  // Key, dataLen, dataBuffer
-  
-  char* buff = decompressed_data.data();
-  int Len = ((int*)buff)[0];
-
-  buff = buff +  sizeof(int); //Place pointer on beg of entry
-
-  // Dat variables
-  char *DatBuf;
-  int DatLen;
-  int StreamDatLen;
-
-  for (int i = 0; i < Len; i++) {
-
-    TIntVFltVPr dat;
-    TInt key = ((TInt*)buff)[0];
-    buff += sizeof(TInt); // On top of data len
-    
-    StreamDatLen = ((TInt*)buff)[0];
-    buff += sizeof(TInt); // On top of data buffer
-    
-    // Recv data
-    TMIn inDat(buff, StreamDatLen, false);
-    dat.Load(inDat);
-    buff += StreamDatLen * sizeof(char);
-    // free(DatBuf); NOT NEEDED
-
-    hash.AddDat(key, dat);
-  }
-  free(compressed_data);
-}
-*/
 
 void sendHM(TIntIntVFltVPrH &hash, int Proc) {
   // Firstly send total size
@@ -1021,11 +836,8 @@ void recvHM(TIntIntVFltVPrH &hash, int Proc) {
 void SendResult(PWNet &ProcNet, int SelectedLen, int *SelectedBuff,
                 int SelfProc, int Proc) {
 
-  // int Lens[SelectedLen];
-  // int* Lens = (int*) malloc(SelectedLen*sizeof(int));
   char **SendBuff = (char **)malloc(SelectedLen * sizeof(char *));
 
-  // std::vector<std::vector<char>> buffers(SelectedLen);
   std::vector<int> Lens(SelectedLen);
 
   // Send data that will be needed
@@ -1033,7 +845,6 @@ void SendResult(PWNet &ProcNet, int SelectedLen, int *SelectedBuff,
   MPI_Send(&SelectedLen, 1, MPI_INT, Proc, 0, MPI_COMM_WORLD);
   MPI_Send(SelectedBuff, SelectedLen, MPI_INT, Proc, 0, MPI_COMM_WORLD);
   for (int i = 0; i < SelectedLen; ++i) {
-    // TMOut stream;
     TIntIntVFltVPrH hash = ProcNet->GetNDat(SelectedBuff[i]);
     sendHM(hash, Proc);
   }
@@ -1079,14 +890,12 @@ THash<TInt, TBool> BFSStep(PWNet &InNet, THash<TInt, TBool> &HM,
                            THash<TInt, TBool> &Selected,
                            THash<TPair<TInt, TInt>, TFlt> &Edges,
                            int ToBeSelectedEdges, int ToBeSelected, int& TotalEdges, bool OnlyOut) {
-  // Iterate over HM (probs won't work)
 
   THash<TInt, TBool> ThisStep;
 
   // On last It Add all edges, but nodes are not to be selected, just return
   // them
   if (!OnlyOut) {
-    // Copy of that one loop
     for (THash<TInt, TBool>::TIter i = Selected.BegI(); !i.IsEnd(); i.Next()) {
 
       TWNet::TNodeI CurrI = InNet->GetNI(i.GetKey());
@@ -1162,21 +971,11 @@ THash<TInt, TBool> BFSStep(PWNet &InNet, THash<TInt, TBool> &HM,
 
 
 // Distribution of graph between procs
-// GIVES ERRORS WITH 1 RANK ONLY
 void DistributeGraph(PWNet &InNet, int NumProcs, int Blocks,
                      THash<TInt, TBool> &SelectedRank0, PWNet &ProcNet0, MPI_Win storageWindow, WinStorage** winStorages) {
 
   int NumNodes = InNet->GetNodes();
   int NumEdges = InNet->GetEdges();
-  // NUMPROCS-1 BECAUSE WE WON'T USE RANK 0 FOR PROCESSING (WE SHOULD)
-
-  /*
-  if(NumProcs == 1){
-    for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
-      PreprocessNodeParallel(InNet, 1.0, 1.0, InNet->GetNI(NI.GetId()));
-    }
-  }
-  */
 
   // Distribute in more blocks than procs
   int ToBeSelected = (NumNodes / (Blocks)) + 1; // Por si van de menos
@@ -1190,14 +989,10 @@ void DistributeGraph(PWNet &InNet, int NumProcs, int Blocks,
     HM.AddKey(NI.GetId());
   }
 
-  // GetRndKeyId (TRnd &Rnd) const
-
   TRnd rand = TRnd();
   
   // Distribute the graph in some qty of blocks
-  for (int i = 0; i < Blocks; i++) { // Get key TODO (from random node in HM)
-    // This sampling is faulty
-    // TWNet::TNodeI Rand = InNet->GetRndNI(rand);
+  for (int i = 0; i < Blocks; i++) {
     int TotalEdges = 0;
 
     THash<TInt, TBool> Selected;
@@ -1207,9 +1002,6 @@ void DistributeGraph(PWNet &InNet, int NumProcs, int Blocks,
 
     // Now this doesn't break but is very strange
     if (HM.Empty()) {
-      // TODO: This can be breaking things
-      
-      //SendChunk(Selected, Edges, i);
       // Horrifying once again
       continue;
     }
@@ -1221,26 +1013,12 @@ void DistributeGraph(PWNet &InNet, int NumProcs, int Blocks,
     HM.DelKey(Rand);
 
     // Only out edges until last iteration, when we'll get in and out ones
-
-    //while (Selected.Len() < ToBeSelected && !HM.Empty()) {
-    //  Make sure that all nodes are being visited still
-    //  Usual condition + safeguard to always finish sending
-    
-    // enough -> TotalEdges/2 > ToBeSelectedEdges || Selected.Len() > ToBeSelected
-    // not enoudh -> TotalEdges/2 < ToBeSelectedEdges && Selected.Len() < ToBeSelected
-    //while (
-    //  (((TotalEdges / 2) < ToBeSelectedEdges && Selected.Len() < ToBeSelected) && !HM.Empty()) 
-    //  || (i == NumProcs-1 && !HM.Empty())
-    //  ){
     while ((TotalEdges / 2 < ToBeSelectedEdges && !HM.Empty()) || (i == Blocks-1 && !HM.Empty())){
 
       LastStep = BFSStep(InNet, HM, LastStep, Selected, Edges,
                          ToBeSelectedEdges - Edges.Len(), ToBeSelected - Selected.Len(), TotalEdges, true);
       if (LastStep.Empty()) {
 
-        // This method is scarily biased, but random sampling of the hash is
-        // faulty as it returns nonexistant ids over and over (0)
-        
         int NewKey = HM.GetKey(HM.GetRndKeyId(rand));
         Selected.AddKey(NewKey);
         TotalEdges += InNet->GetNI(NewKey).GetDeg();
@@ -1297,7 +1075,6 @@ void DistributeGraph(PWNet &InNet, int NumProcs, int Blocks,
 void PreprocessNodeParallel(PWNet &InNet, const double &ParamP,
                             const double &ParamQ, TWNet::TNodeI NI) {
 
-  // TODO !!!
   // Maybe initializing the graph would be great I guess. This is probably
   // helping a lot with the overhead, So I should probably just be creating the
   // data for those nodes that have been assigned the v
@@ -1307,7 +1084,7 @@ void PreprocessNodeParallel(PWNet &InNet, const double &ParamP,
   // Allocate the necessary space in the hashtable (only for the node to be
   // calc'd)
   // With this horrifying fix that gets full deg, the code now works on cluster
-  // environment wtf
+  // environment wtf (switched getindeg for full deg)
   for (int64 i = 0; i < NI.GetDeg();
        i++) { // allocating space in advance to avoid issues with multithreading
     TWNet::TNodeI CurrI = InNet->GetNI(NI.GetNbrNId(i));
@@ -1505,9 +1282,9 @@ void PreprocessNode(PWNet &InNet, const double &ParamP, const double &ParamQ,
 
 // Preprocess transition probabilities for each path t->v->x
 
-///////////////////////////
-// TODO: Parallelization //
-///////////////////////////
+///////////////////////
+// Starting Function //
+///////////////////////
 
 void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
                                const double &ParamQ, const int& Blocks_original, const bool &verbose) {
@@ -1564,7 +1341,6 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     }
   }
 
-  // My own process
   
   // Create RMA window
   MPI_Win storageWindow;
@@ -1577,7 +1353,6 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
   MPI_Win resultWindow;
   MPI_Win_create_dynamic(MPI_INFO_NULL, MPI_COMM_WORLD, &resultWindow);
   
-  // TODO: maybe there is a need for one window for process
   MPI_Win procResultWindow;
   MPI_Win_create_dynamic(MPI_INFO_NULL, MPI_COMM_WORLD, &procResultWindow);
   
@@ -1613,22 +1388,10 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
   THash<TInt, TBool> SelectedRank0;
   if (rank == 0) {
 
-    //totalSize = initResultStorage(InNet, &results);
-
-    // Alloc everything to be received
-    //MPI_Win_attach(resultWindow, results, totalSize);
 
     MPI_Aint dispResult;
-    //MPI_Get_address(results, &dispResult);
-
-    //*((MPI_Aint*)results) = (MPI_Aint)sizeof(MPI_Aint);
-
-    //MPI_Win_sync(resultWindow);
-    //MPI_Bcast(&dispResult, 1, MPI_AINT, 0, MPI_COMM_WORLD);
 
     int BlocksSent = 0;
-    // Blocks of storage
-    // Each will be individually alloc'd if needed
     
     WinStorage** winStorages = (WinStorage**)malloc(sizeof(WinStorage*) * Blocks);
 
@@ -1659,7 +1422,6 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
       } else if (result == 1){
         usleep(5000);
         // do nothing, should retry the operation please, but wait a moment;
-        // TODO: Please do something to wait here
       } else {
         // Everything went right so nothing to do
         // Already put everything
@@ -1678,7 +1440,6 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     }
     free(winStorages);
     for(int i = 1; i < numprocs; i++){
-      // TODO: Recv from process
       printf("Start recv\n");
       fflush(stdout);
 
@@ -1706,8 +1467,6 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     
 
     MPI_Aint dispResult;
-    //MPI_Bcast(&dispResult, 1, MPI_AINT, 0, MPI_COMM_WORLD);
-    // Start by getting the bcast that will also signal that the rma is active
     MPI_Aint disp;
     MPI_Bcast(&disp, 1, MPI_AINT, 0, MPI_COMM_WORLD);
     
@@ -1716,7 +1475,6 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
     while(moreBlocks){
 
       printf("Before get first-> disp: %p, blocks: %d\n\n", disp, Blocks);
-      // TODO: Use the ProcNet here, later gather from it
       int result = getFirstAvailable(ProcNet, storageWindow, resultWindow, procResultWindow, disp, dispResult, initNode, ParamP, ParamQ, Blocks, ProcSelectedLen, ProcSelectedBuff, index);
       
       if(result == -1){
@@ -1725,7 +1483,6 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
       } else if (result == 1){
         usleep(5000);
         // do nothing, should retry the operation please, but wait a moment;
-        // TODO: Please do something to wait here
       } else {
         // Everything went right so nothing to do
         // Already put everything
@@ -1762,29 +1519,6 @@ void PreprocessTransitionProbs(PWNet &InNet, const double &ParamP,
 
   }
 
-  // Gathering seems functional
-  if (rank == 0) {
-    // Proc 0 isn't sending
-
-    /*
-    for (TWNet::TNodeI NI = InNet->BegNI(); NI < InNet->EndNI(); NI++) {
-      int id = NI.GetId();
-
-      TIntIntVFltVPrH data = InNet->GetNDat(id);
-      if (data.Empty())
-        printf("Something wrong\n"); // Better to throw some error
-
-      for (THash<TInt, TIntVFltVPr>::TIter i = data.BegI(); !i.IsEnd();
-           i.Next()) {
-        TIntVFltVPr vect = data.GetDat(i.GetKey());
-        TIntV intv = vect.GetVal1();
-        TFltV fltv = vect.GetVal2();
-      }
-    }
-    */
-
-  } else {
-  }
 }
 
 int64 PredictMemoryRequirements(PWNet &InNet) {
